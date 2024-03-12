@@ -4,29 +4,25 @@ from math import pi
 from crystal_genome_util.aflow_util import get_stoich_reduced_list_from_prototype
 from ase.build import bulk
 
-class BindingEnergyVsWignerSeitzRadius(CrystalGenomeTest):
-    def _calculate(self, structure_index: int, a_min_frac: float, a_max_frac: float, N: int):
+class HeatCapacityPhonon(CrystalGenomeTest):
+    def _calculate(self, temperature: float, pressure: float):
         """
         structure_index:
             KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). 
             This indicates which is being used for the current calculation.
 
-        a_min_frac:
-            A fraction which indicates the smallest lattice constant for which the Test
-            will attempt to compute the cohesive energy.  The smallest lattice spacing
-            will be calculated as a_min = a_min_frac*a_0.  Must be strictly greater than
-            zero and strictly less than one.
-
-        a_max_frac:
-            A fraction which indicates the largest lattice constant for which the Test
-            will attempt to compute the cohesive energy.  The largest lattice spacing
-            will be calculated as a_max = a_max_frac*a_0.  Must be strictly greater than
-            one.
-
-        N
-            The number of lattice spacings sampled
+        temperature:
+            Temperature in Kelvin at which the phonon contribution to the heat capacity 
+            at constant volume is estimated. Must be strictly greater than zero.
+        
+        TODO: Fix units.
+        pressure:
+            Pressure in ... of the NPT simulation for the initial equilibration of the 
+            zero-temperature configuration. Must be strictly greater than zero.
         """
         atoms = self.atoms[structure_index]
+        # TODO: Should we call the lammps executable explicitly or is there some internal 
+        # to do it (say via self.model)?
         
         ####################################################
         # ACTUAL CALCULATION BEGINS 
