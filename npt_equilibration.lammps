@@ -10,7 +10,8 @@ boundary p p p
 # Explicitly include neighbor list command so that it can be changed conveniently.
 neigh_modify delay 0 every 1 check yes one 2000
 
-# TODO: Read input here.
+# Read initial zero-temperature crystal.
+read_data zero_temperature_crystal.lmp
 
 # Interatomic potential and neighbor settings
 kim interactions ${species}
