@@ -257,3 +257,11 @@
 2024-03-13:19:11:15UTC * 2 * information * 0x2e147d0_Collections * KIM_LogImplementation.cpp:246 * Log object renamed.  ID changed from '0x2942c50'.
 2024-03-13:19:11:15UTC * 3 * information * 0x2e147d0_Collections * KIM_LogImplementation.cpp:119 * Log object destroyed.
 2024-03-13:19:11:15UTC * 1 * information * 0x2e147d0 * KIM_LogImplementation.cpp:119 * Log object destroyed.
+2024-03-13:19:44:29UTC * 0 * information * 0x137df40 * KIM_LogImplementation.cpp:107 * Log object created.  Default verbosity level is 'information'.
+2024-03-13:19:44:29UTC * 1 * information * 0x137df40 * KIM_LogImplementation.cpp:119 * Log object destroyed.
+2024-03-13:19:44:29UTC * 0 * information * 0x137df40 * KIM_LogImplementation.cpp:107 * Log object created.  Default verbosity level is 'information'.
+2024-03-13:19:44:29UTC * 0 * information * 0x12e6c00 * KIM_LogImplementation.cpp:107 * Log object created.  Default verbosity level is 'information'.
+2024-03-13:19:44:29UTC * 1 * information * 0x12e6c00 * KIM_LogImplementation.cpp:242 * Log object renamed.  ID changed to '0x137df40_Collections'.
+2024-03-13:19:44:29UTC * 2 * information * 0x137df40_Collections * KIM_LogImplementation.cpp:246 * Log object renamed.  ID changed from '0x12e6c00'.
+2024-03-13:19:44:29UTC * 3 * information * 0x137df40_Collections * KIM_LogImplementation.cpp:119 * Log object destroyed.
+2024-03-13:19:44:29UTC * 1 * information * 0x137df40 * KIM_LogImplementation.cpp:119 * Log object destroyed.

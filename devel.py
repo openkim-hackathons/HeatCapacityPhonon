@@ -6,7 +6,7 @@ from crystal_genome_util.aflow_util import get_stoich_reduced_list_from_prototyp
 from ase.build import bulk
 import os
 class HeatCapacityPhonon(CrystalGenomeTest):
-    def _calculate(self, structure_index: int, temperature: float, pressure: float, mass:list, repeat:tuple=(5,5,5), timestep: float, number_control_timesteps: int):
+    def _calculate(self, structure_index: int, temperature: float, pressure: float, mass:list, timestep: float, number_control_timesteps: int,repeat:tuple=(3,3,3)):
         """
         structure_index:
             KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). 
