@@ -29,15 +29,12 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         atoms = self.atoms[structure_index]
         
         """TODO: Guanming puts code here."""
-        print(atoms)
         atoms = atoms.repeat(repeat)
-        print(atoms)        
         proto = self.prototype_label
         
         # __file__ is the location of the current file
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
         structure_file = os.path.join(TDdirectory,"zero_temperature_crystal.lmp")
-        print(structure_file)
         atoms.write(structure_file,format="lammps-data")
         # TODO: HOW DO WE GET THE .lmp file?
         
@@ -132,7 +129,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         mass_lines.append("\n")
 
         for i in range(1,len(masses)+1):
-            mass_lines.append("    "+str(i))
+            mass_lines.append("    "+str(i)+" "+str(masses[i-1])+"\n")
 
         mass_lines.append("\n")
     
@@ -153,5 +150,5 @@ if __name__ == "__main__":
     atoms1 = bulk('NaCl','rocksalt',a=4.58)
     atoms2 = bulk('NaCl','cesiumchloride',a=4.58)
     test = HeatCapacityPhonon(model_name="Sim_LAMMPS_EIM_Zhou_2010_BrClCsFIKLiNaRb__SM_259779394709_000", atoms=atoms1)
-    test(temperature = 298, pressure = 1.0, mass = [1.0,.10],timestep=0.001, number_control_timesteps=10,repeat=(3,3,3))
+    test(temperature = 298, pressure = 1.0, mass = atoms1.get_masses(),timestep=0.001, number_control_timesteps=10,repeat=(3,3,3))
 
