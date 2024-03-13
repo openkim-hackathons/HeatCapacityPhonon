@@ -44,11 +44,6 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         ####################################################
         # ACTUAL CALCULATION BEGINS 
         ####################################################
-        average_wigner_seitz_radius = []
-        binding_potential_energy_per_atom = []
-        binding_potential_energy_per_formula = []
-        a_frac_range = a_max_frac - a_min_frac
-        a_frac_step = a_frac_range/(N-1)
         original_cell = atoms.get_cell() # do this instead of deepcopy
         natoms = len(atoms)
 
@@ -56,11 +51,6 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             a_frac = a_frac_step*i + a_min_frac
             print("evaluating a_frac = " + str(a_frac) + " ...")
             atoms.set_cell(multiply(original_cell,a_frac),scale_atoms = True)
-            average_wigner_seitz_radius.append(((atoms.get_volume()/natoms)*(3/4)/pi)**(1/3))            
-            pe_per_atom = atoms.get_potential_energy()/natoms
-            binding_potential_energy_per_atom.append(pe_per_atom)
-            binding_potential_energy_per_formula.append(pe_per_atom*sum(get_stoich_reduced_list_from_prototype(self.prototype_label)))
-
         
         # LAMMPS for heat capacity
         seed = np.random.randint(0, 1000)
@@ -73,6 +63,33 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         command = 'lammps -var %s -in %s'%(lmp_npt, script)
         subprocess.run(command, check=True, shell=True)
 
+        # Check symmetry - post-NPT
+        try:
+
+            self._update_aflow_designation_from_atoms(structure_index,atoms_new)
+            raise RuntimeError("We should not have gotten here")
+
+        except KIMASEError as e:
+            print("We have successfully caught an exception with the following message:")
+            print(e.msg)
+
+        # NVT simulation
+        vol = np.loadtxt('volume.dat')
+
+        lmp_nvt = 'modelname ${model_name} temperature ${temperature} temperature_seed ${seed} temperature_damping ${tdamp} volume ${vol} timestep ${timestep} number_control_timesteps ${number_control_timesteps}'
+        script = 'nvt_equilibration.lammps'
+        command = 'lammps -var %s -in %s'%(lmp_npt, script)
+        subprocess.run(command, check=True, shell=True) 
+
+        # Check symmetry - post-NVT
+        try:
+
+            self._update_aflow_designation_from_atoms(structure_index,atoms_new)
+            raise RuntimeError("We should not have gotten here")
+
+        except KIMASEError as e:
+            print("We have successfully caught an exception with the following message:")
+            print(e.msg)
 
         ####################################################
         # ACTUAL CALCULATION ENDS 
@@ -107,11 +124,18 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         ####################################################
         # PROPERTY WRITING
         ####################################################
+        
+        # Import data
+        cv = np.loadtxt('cv.dat')
+        cp = np.loadtxt('cp.dat')
+
+        # Assign property
         self._add_property_instance("heat_capacity")
         self._add_common_crystal_genome_keys_to_current_property_instance(structure_index,write_stress=False,write_temp=False) # last two default to False
-        self._add_key_to_current_property_instance("average-wigner-seitz-radius",average_wigner_seitz_radius,"angstrom")
-        self._add_key_to_current_property_instance("constant_pressure_heat_capacity",constant_pressure_heat_capacity,"eV")
-        self._add_key_to_current_property_instance("constant_volume_heat_capacity",constant_volume_heat_capacity,"eV")
+        self._add_key_to_current_property_instance("constant_pressure_heat_capacity",constant_pressure_heat_capacity,"eV/Kelvin")
+        self._add_key_to_current_property_instance("constant_volume_heat_capacity",constant_volume_heat_capacity,"eV/Kelvin")
+        self._add_key_to_current_property_instance("volume", volume, "Angstroms^3")
+        self._add_key_to_current_property_instance("pressure", pressure, "bars")
         ####################################################
         # PROPERTY WRITING END
         ####################################################

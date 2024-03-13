@@ -41,6 +41,12 @@ thermo_style custom step v_pe_metal v_ke_metal v_temp_metal v_press_metal v_vol_
                          v_xlo_metal v_xhi_metal v_ylo_metal v_yhi_metal v_zlo_metal v_zhi_metal
 thermo ${number_sampling_timesteps}
 
+# Store unwrapped coordinates for every atom.
+compute unwrappedPos all property/atom xu yu zu
+
+# Average the unwrapped positions.
+fix avePos all ave/atom 1 ${number_control_timesteps} ${number_control_timesteps} c_unwrappedPos[0] c_unwrappedPos[1] c_unwrappedPos[2]
+
 # Set timestep.
 timestep $(timestep*v__u_time)
 
@@ -51,8 +57,13 @@ python run_length_control input 4 SELF ${number_control_timesteps} variable v_vo
 python run_length_control invoke
 
 # TODO: Store final volume?
+# Print the final volume.
+print "$vol" screen no file final_volume.dat
 
-# TODO: Write out average positions and read it in Python so that we can check the structure. 
+# Dump the average unwrapped positions.
+dump avePosDump all custom 1 average_position.dump id type f_avePos[0] f_avePos[1] f_avePos[2]
+dump_modify avePosDump first yes
+run 0
 
 # Write the initial starting file for a true simulation.
 reset_timestep 0
