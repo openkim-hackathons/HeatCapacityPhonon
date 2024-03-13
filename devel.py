@@ -4,9 +4,9 @@ import numpy as np
 from math import pi
 from crystal_genome_util.aflow_util import get_stoich_reduced_list_from_prototype
 from ase.build import bulk
-
+import os
 class HeatCapacityPhonon(CrystalGenomeTest):
-    def _calculate(self, structure_index: int, temperature: float, pressure: float, timestep: float, number_control_timesteps: int):
+    def _calculate(self, structure_index: int, temperature: float, pressure: float, mass:list, timestep: float, number_control_timesteps: int,repeat:tuple=(3,3,3)):
         """
         structure_index:
             KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). 
@@ -29,12 +29,21 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         atoms = self.atoms[structure_index]
         
         """TODO: Guanming puts code here."""
-
+        print(atoms)
+        atoms = atoms.repeat(repeat)
+        print(atoms)        
+        proto = self.prototype_label
+        
+        # __file__ is the location of the current file
+        TDdirectory = os.path.dirname(os.path.realpath(__file__))
+        structure_file = os.path.join(TDdirectory,"zero_temperature_crystal.lmp")
+        print(structure_file)
+        atoms.write(structure_file,format="lammps-data")
         # TODO: HOW DO WE GET THE .lmp file?
         
         # TODO: Should we call the lammps executable explicitly or is there some internal 
         # to do it (say via self.model)?
-        
+        self.add_masses_to_data_file(structure_file,mass)
         ####################################################
         # ACTUAL CALCULATION BEGINS 
         ####################################################
@@ -137,7 +146,28 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         ####################################################
         # PROPERTY WRITING END
         ####################################################
-        
+       # add masses to data file
+    def add_masses_to_data_file(self,data_file,masses):
+        TDdirectory = os.path.dirname(os.path.realpath(__file__))
+        structure_file = os.path.join(TDdirectory,data_file)
+    
+        with open(structure_file,"r") as infile:
+            data = infile.readlines()
+   
+        mass_lines = []
+        mass_lines.append("\n")
+        mass_lines.append("Masses \n")
+        mass_lines.append("\n")
+
+        for i in range(1,len(masses)+1):
+            mass_lines.append("    "+str(i))
+
+        mass_lines.append("\n")
+    
+        all_lines = data + mass_lines
+        with open(structure_file,"w") as outfile:
+            outfile.writelines(all_lines)
+
 if __name__ == "__main__":
     ####################################################
     # if called directly, do some debugging examples
@@ -150,6 +180,6 @@ if __name__ == "__main__":
     # Alternatively, for debugging, give it atoms object or a list of atoms objects
     atoms1 = bulk('NaCl','rocksalt',a=4.58)
     atoms2 = bulk('NaCl','cesiumchloride',a=4.58)
+    test = HeatCapacityPhonon(model_name="Sim_LAMMPS_EIM_Zhou_2010_BrClCsFIKLiNaRb__SM_259779394709_000", atoms=atoms1)
+    test(temperature = 298, pressure = 1.0, mass = [1.0,.10],timestep=0.001, number_control_timesteps=10,repeat=(3,3,3))
 
-    # Hard-coded values for testing
-    test = HeatCapacityPhonon(model_name="Sim_LAMMPS_EIM_Zhou_2010_BrClCsFIKLiNaRb__SM_259779394709_000", atoms=atoms1, temperature=298, pressure=0.1, timestep=0.001, number_control_timesteps=10)
