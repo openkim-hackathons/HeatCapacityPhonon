@@ -15,12 +15,22 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             Temperature in Kelvin at which the phonon contribution to the heat capacity 
             at constant volume is estimated. Must be strictly greater than zero.
         
-        TODO: Fix units.
         pressure:
-            Pressure in ... of the NPT simulation for the initial equilibration of the 
+            Pressure in bar of the NPT simulation for the initial equilibration of the 
             zero-temperature configuration. Must be strictly greater than zero.
         """
+        if not temperature > 0.0:
+            raise RuntimeError("Temperature has to be larger than zero.")
+        
+        if not pressure > 0.0:
+            raise RuntimeError("Pressure has to be larger than zero.")
+        
         atoms = self.atoms[structure_index]
+        
+        """TODO: Guanming puts code here."""
+
+        # TODO: HOW DO WE GET THE .lmp file?
+        
         # TODO: Should we call the lammps executable explicitly or is there some internal 
         # to do it (say via self.model)?
         
