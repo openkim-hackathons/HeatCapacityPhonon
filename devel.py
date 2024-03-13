@@ -1,11 +1,12 @@
 from kim_python_utils.ase import CrystalGenomeTest,KIMASEError
 from numpy import multiply
+import numpy as np
 from math import pi
 from crystal_genome_util.aflow_util import get_stoich_reduced_list_from_prototype
 from ase.build import bulk
 import os
 class HeatCapacityPhonon(CrystalGenomeTest):
-    def _calculate(self, structure_index: int, temperature: float, pressure: float, mass:list, repeat:tuple=(5,5,5)):
+    def _calculate(self, structure_index: int, temperature: float, pressure: float, mass:list, repeat:tuple=(5,5,5), timestep: float, number_control_timesteps: int):
         """
         structure_index:
             KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). 
@@ -62,6 +63,20 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             pe_per_atom = atoms.get_potential_energy()/natoms
             binding_potential_energy_per_atom.append(pe_per_atom)
             binding_potential_energy_per_formula.append(pe_per_atom*sum(get_stoich_reduced_list_from_prototype(self.prototype_label)))
+
+        
+        # LAMMPS for heat capacity
+        seed = np.random.randint(0, 1000)
+        pdamp = timestep * 100
+        tdamp = timestep * 100
+
+        # NPT simulation
+        lmp_npt = 'modelname ${model_name} temperature ${temperature} temperature_seed ${seed} temperature_damping ${tdamp} pressure ${pressure} pressure_damping ${pdamp} timestep ${timestep} number_control_timesteps ${number_control_timesteps}'
+        script = 'npt_equilibration.lammps'
+        command = 'lammps -var %s -in %s'%(lmp_npt, script)
+        subprocess.run(command, check=True, shell=True)
+
+
         ####################################################
         # ACTUAL CALCULATION ENDS 
         ####################################################
@@ -95,11 +110,11 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         ####################################################
         # PROPERTY WRITING
         ####################################################
-        self._add_property_instance("property")
+        self._add_property_instance("heat_capacity")
         self._add_common_crystal_genome_keys_to_current_property_instance(structure_index,write_stress=False,write_temp=False) # last two default to False
         self._add_key_to_current_property_instance("average-wigner-seitz-radius",average_wigner_seitz_radius,"angstrom")
-        self._add_key_to_current_property_instance("binding-potential-energy-per-atom",binding_potential_energy_per_atom,"eV")
-        self._add_key_to_current_property_instance("binding-potential-energy-per-formula",binding_potential_energy_per_formula,"eV")
+        self._add_key_to_current_property_instance("constant_pressure_heat_capacity",constant_pressure_heat_capacity,"eV")
+        self._add_key_to_current_property_instance("constant_volume_heat_capacity",constant_volume_heat_capacity,"eV")
         ####################################################
         # PROPERTY WRITING END
         ####################################################
@@ -125,29 +140,6 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         with open(structure_file,"w") as outfile:
             outfile.writelines(all_lines)
 
-# add masses to data file
-'''
-def add_messes_to_data_file(data_file,masses):
-    TDdirectory = os.path.dirname(os.path.realpath(__file__))
-    strucure_file = os.path.join(TDdirectory,data_file)
-    
-    with open(structure_file,"r") as infile:
-        data = infile.readlines()
-   
-    mass_lines = []
-    mass_lines.append("\n")
-    mass_lines.append("Masses \n")
-    mass_lines.append("\n")
-
-    for i in range(1,len(masses)+1):
-        mass_lines.append("    "+str(i))
-
-    mass_lines.append("\n")
-    
-    all_lines = data + mass_lines
-    with open(structure_file,"w") as outfile:
-        outfile.writelines(all_lines)
-'''        
 if __name__ == "__main__":
     ####################################################
     # if called directly, do some debugging examples
@@ -161,4 +153,5 @@ if __name__ == "__main__":
     atoms1 = bulk('NaCl','rocksalt',a=4.58)
     atoms2 = bulk('NaCl','cesiumchloride',a=4.58)
     test = HeatCapacityPhonon(model_name="Sim_LAMMPS_EIM_Zhou_2010_BrClCsFIKLiNaRb__SM_259779394709_000", atoms=atoms1)
-    test(temperature = 10.0, pressure = 1.0, mass = [1.0,.10],repeat=(3,3,3))
+    test(temperature = 298, pressure = 1.0, mass = [1.0,.10],timestep=0.001, number_control_timesteps=10,repeat=(3,3,3))
+
