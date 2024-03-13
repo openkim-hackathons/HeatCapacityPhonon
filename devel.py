@@ -67,6 +67,33 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         command = 'lammps -var %s -in %s'%(lmp_npt, script)
         subprocess.run(command, check=True, shell=True)
 
+        # Check symmetry - post-NPT
+        try:
+
+            self._update_aflow_designation_from_atoms(structure_index,atoms_new)
+            raise RuntimeError("We should not have gotten here")
+
+        except KIMASEError as e:
+            print("We have successfully caught an exception with the following message:")
+            print(e.msg)
+
+        # NVT simulation
+        vol = np.loadtxt('volume.dat')
+
+        lmp_nvt = 'modelname ${model_name} temperature ${temperature} temperature_seed ${seed} temperature_damping ${tdamp} volume ${vol} timestep ${timestep} number_control_timesteps ${number_control_timesteps}'
+        script = 'nvt_equilibration.lammps'
+        command = 'lammps -var %s -in %s'%(lmp_npt, script)
+        subprocess.run(command, check=True, shell=True) 
+
+        # Check symmetry - post-NVT
+        try:
+
+            self._update_aflow_designation_from_atoms(structure_index,atoms_new)
+            raise RuntimeError("We should not have gotten here")
+
+        except KIMASEError as e:
+            print("We have successfully caught an exception with the following message:")
+            print(e.msg)
 
         ####################################################
         # ACTUAL CALCULATION ENDS 
@@ -103,9 +130,10 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         ####################################################
         self._add_property_instance("heat_capacity")
         self._add_common_crystal_genome_keys_to_current_property_instance(structure_index,write_stress=False,write_temp=False) # last two default to False
-        self._add_key_to_current_property_instance("average-wigner-seitz-radius",average_wigner_seitz_radius,"angstrom")
-        self._add_key_to_current_property_instance("constant_pressure_heat_capacity",constant_pressure_heat_capacity,"eV")
-        self._add_key_to_current_property_instance("constant_volume_heat_capacity",constant_volume_heat_capacity,"eV")
+        self._add_key_to_current_property_instance("constant_pressure_heat_capacity",constant_pressure_heat_capacity,"eV/Kelvin")
+        self._add_key_to_current_property_instance("constant_volume_heat_capacity",constant_volume_heat_capacity,"eV/Kelvin")
+        self._add_key_to_current_property_instance("volume", volume, "Angstroms^3")
+        self._add_key_to_current_property_instance("pressure", pressure, "bars")
         ####################################################
         # PROPERTY WRITING END
         ####################################################
