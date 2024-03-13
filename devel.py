@@ -62,9 +62,11 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         tdamp = timestep * 100
 
         # NPT simulation
-        lmp_npt = 'lmp modelname ${model_name} temperature ${temperature} temperature_seed ${seed} temperature_damping ${tdamp} pressure ${pressure} pressure_damping ${pdamp} timestep ${timestep} number_control_timesteps ${number_control_timesteps}'
+        lmp_npt = 'modelname ${model_name} temperature ${temperature} temperature_seed ${seed} temperature_damping ${tdamp} pressure ${pressure} pressure_damping ${pdamp} timestep ${timestep} number_control_timesteps ${number_control_timesteps}'
         script = 'npt_equilibration.lammps'
-        
+        command = 'lammps -var %s -in %s'%(lmp_npt, script)
+        subprocess.run(command, check=True, shell=True)
+
 
         ####################################################
         # ACTUAL CALCULATION ENDS 
