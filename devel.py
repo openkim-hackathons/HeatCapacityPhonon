@@ -1,7 +1,7 @@
 import os
 import random
 import subprocess
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Tuple, Sequence
 import uuid
 import numpy as np
 from ase.build import bulk
@@ -11,7 +11,8 @@ from kim_python_utils.ase import CrystalGenomeTest, KIMASEError
 class HeatCapacityPhonon(CrystalGenomeTest):
     def _calculate(self, structure_index: int, temperature: float, pressure: float, 
                    mass: Iterable[float], timestep: float, number_control_timesteps: int, 
-                   repeat: tuple[int, int, int] = (3,3,3), seed: Optional[int] = None) -> None:
+                   number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3,3,3), 
+                   seed: Optional[int] = None) -> None:
         """
         structure_index:
             KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). 
@@ -38,12 +39,13 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         
         # Repeat atoms in given unit cell.
         atoms = self.atoms[structure_index]
+        # TODO: Ask whether this is the correct way.
         species_of_each_atom = atoms.get_chemical_symbols()
         atoms = atoms.repeat(repeat)
         
         # Write lammps file.
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
-        structure_file = os.path.join(TDdirectory, "zero_temperature_crystal.lmp")
+        structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
         atoms.write(structure_file, format="lammps-data")
         self._add_masses_to_structure_file(structure_file, mass)
 
@@ -56,8 +58,8 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         
         # LAMMPS for heat capacity
         if seed is None:
-            # Get random 64-bit unsigned integer.
-            seed = random.getrandbits(64)
+            # Get random 31-bit unsigned integer.
+            seed = random.getrandbits(31)
             
         # TODO: Move damping factors to argument.
         pdamp = timestep * 100.0
@@ -73,17 +75,21 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             "pressure_damping": pdamp,
             "timestep": timestep,
             "number_control_timesteps": number_control_timesteps,
+            "number_sampling_timesteps": number_sampling_timesteps,
             "species": " ".join(species_of_each_atom) 
         }
         # TODO: Possibly run MPI version of Lammps if available.
         command = (
-            "lammps" 
-            + " ".join(f"-var {key} {item}" for key, item in variables.items()) 
+            "lammps " 
+            + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_equilibration.lammps")
         subprocess.run(command, check=True, shell=True)
 
+        exit()
+
         # Check symmetry - post-NPT
-        output = np.loadtxt('average_position_dump')
+        # TODO: Fix loading txt according to created dump file.
+        output = np.loadtxt('average_position.dump')
         new_species = []
         new_pos = []
 
@@ -171,11 +177,11 @@ class HeatCapacityPhonon(CrystalGenomeTest):
     @staticmethod
     def _add_masses_to_structure_file(structure_file: str, masses: Iterable[float]) -> None:
         with open(structure_file, "a") as file:
-            print()
-            print("Masses")
-            print()
+            print(file=file)
+            print("Masses", file=file)
+            print(file=file)
             for i, mass in enumerate(masses):
-                print(f"    {i+1} {mass}")
+                print(f"    {i+1} {mass}", file=file)
 
 
 if __name__ == "__main__":
@@ -190,6 +196,13 @@ if __name__ == "__main__":
     # Alternatively, for debugging, give it atoms object or a list of atoms objects
     atoms1 = bulk('NaCl','rocksalt',a=4.58)
     atoms2 = bulk('NaCl','cesiumchloride',a=4.58)
-    test = HeatCapacityPhonon(model_name="Sim_LAMMPS_EIM_Zhou_2010_BrClCsFIKLiNaRb__SM_259779394709_000", atoms=atoms1)
-    test(temperature = 298, pressure = 1.0, mass = atoms1.get_masses(), timestep=0.001, number_control_timesteps=10, repeat=(3,3,3))
+    model_name = "Sim_LAMMPS_EIM_Zhou_2010_BrClCsFIKLiNaRb__SM_259779394709_000"
+    model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
+
+    atoms = bulk("Ar", "sc", a=3.6343565881252293)
+    subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
+    test = HeatCapacityPhonon(model_name=model_name, atoms=atoms)
+    test(temperature = 298.0, pressure = 1.0, mass = atoms.get_masses(), 
+         timestep=0.001, number_control_timesteps=10, number_sampling_timesteps=10,
+         repeat=(5,5,5))
 
