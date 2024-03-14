@@ -10,14 +10,6 @@
 ; CHANGE THE SECTION BELOW WHEN CREATING NEW PROPERTIES
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  "average-wigner-seitz-radius" {
-    "type"         "float"
-    "has-unit"     true
-    "extent"       [":"]
-    "required"     true
-    "description" "A vector of average Wigner-Seitz radii. he average Wigner-Seitz radius is defined as the radius of the sphere with volume equal to the volume of the unit cell divided by the number of atoms in the unit cell."
-  }  
-  
   "constant_volume_heat_capacity" {
     "type"         "float"
     "has-unit"     true
@@ -48,14 +40,6 @@
     "extent"        []
     "required"      true
     "description"   "Pressure of system"
-  }
-
-  "dulong_petit_law"{
-    "type"          "float"
-    "has_unit"      true
-    "extent"        []
-    "required"      true
-    "description"   "Dulong-Petit limit for heat capacity of solid"
   }
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
