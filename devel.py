@@ -4,7 +4,10 @@ import numpy as np
 from math import pi
 from crystal_genome_util.aflow_util import get_stoich_reduced_list_from_prototype
 from ase.build import bulk
+from ase.utils.structure_comparator import SymmetryEquivalenceCheck
 import os
+import subprocess
+
 class HeatCapacityPhonon(CrystalGenomeTest):
     def _calculate(self, structure_index: int, temperature: float, pressure: float, mass:list, timestep: float, number_control_timesteps: int,repeat:tuple=(3,3,3)):
         """
@@ -49,11 +52,6 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         ####################################################
         original_cell = atoms.get_cell() # do this instead of deepcopy
         natoms = len(atoms)
-
-        for i in range(N):
-            a_frac = a_frac_step*i + a_min_frac
-            print("evaluating a_frac = " + str(a_frac) + " ...")
-            atoms.set_cell(multiply(original_cell,a_frac),scale_atoms = True)
         
         # LAMMPS for heat capacity
         seed = np.random.randint(0, 1000)
@@ -67,10 +65,20 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         subprocess.run(command, check=True, shell=True)
 
         # Check symmetry - post-NPT
+        output = np.loadtxt('average_position_dump')
+        new_species = []
+        new_pos = []
+
+        for line in output:
+            new_species.append(output[i][0])
+            new_pos.append([output[i,1], output[i,2], output[i,3]])
+
+        new_atom = bulk()
+
         try:
 
             self._update_aflow_designation_from_atoms(structure_index,atoms_new)
-            raise RuntimeError("We should not have gotten here")
+            raise RuntimeError("Symmetry of crystal changed during NPT equilibration!")
 
         except KIMASEError as e:
             print("We have successfully caught an exception with the following message:")
@@ -88,7 +96,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         try:
 
             self._update_aflow_designation_from_atoms(structure_index,atoms_new)
-            raise RuntimeError("We should not have gotten here")
+            raise RuntimeError("Symmetry of crystal changed during NVT equilibration!")
 
         except KIMASEError as e:
             print("We have successfully caught an exception with the following message:")
@@ -127,7 +135,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         ####################################################
         # PROPERTY WRITING
         ####################################################
-        
+
         # Import data
         cv = np.loadtxt('cv.dat')
         cp = np.loadtxt('cp.dat')
@@ -177,5 +185,5 @@ if __name__ == "__main__":
     atoms1 = bulk('NaCl','rocksalt',a=4.58)
     atoms2 = bulk('NaCl','cesiumchloride',a=4.58)
     test = HeatCapacityPhonon(model_name="Sim_LAMMPS_EIM_Zhou_2010_BrClCsFIKLiNaRb__SM_259779394709_000", atoms=atoms1)
-    test(temperature = 298, pressure = 1.0, mass = [1.0,.10],timestep=0.001, number_control_timesteps=10,repeat=(3,3,3))
+    test(temperature = 298, pressure = 1.0, mass = atoms1.get_masses(),timestep=0.001, number_control_timesteps=10,repeat=(3,3,3))
 
