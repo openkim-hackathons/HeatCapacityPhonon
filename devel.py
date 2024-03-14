@@ -38,6 +38,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         
         # Repeat atoms in given unit cell.
         atoms = self.atoms[structure_index]
+        species_of_each_atom = atoms.get_chemical_symbols()
         atoms = atoms.repeat(repeat)
         
         # Write lammps file.
@@ -71,7 +72,8 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             "pressure": pressure,
             "pressure_damping": pdamp,
             "timestep": timestep,
-            "number_control_timesteps": number_control_timesteps
+            "number_control_timesteps": number_control_timesteps,
+            "species": " ".join(species_of_each_atom) 
         }
         # TODO: Possibly run MPI version of Lammps if available.
         command = (
