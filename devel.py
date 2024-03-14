@@ -1,15 +1,17 @@
-from kim_python_utils.ase import CrystalGenomeTest,KIMASEError
-from numpy import multiply
-import numpy as np
-from math import pi
-from crystal_genome_util.aflow_util import get_stoich_reduced_list_from_prototype
-from ase.build import bulk
-from ase.utils.structure_comparator import SymmetryEquivalenceCheck
 import os
+import random
 import subprocess
+from typing import Iterable, Optional, Sequence
+import uuid
+import numpy as np
+from ase.build import bulk
+from kim_python_utils.ase import CrystalGenomeTest, KIMASEError
+
 
 class HeatCapacityPhonon(CrystalGenomeTest):
-    def _calculate(self, structure_index: int, temperature: float, pressure: float, mass:list, timestep: float, number_control_timesteps: int,repeat:tuple=(3,3,3)):
+    def _calculate(self, structure_index: int, temperature: float, pressure: float, 
+                   mass: Iterable[float], timestep: float, number_control_timesteps: int, 
+                   repeat: tuple[int, int, int] = (3,3,3), seed: Optional[int] = None) -> None:
         """
         structure_index:
             KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). 
@@ -22,43 +24,60 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         pressure:
             Pressure in bar of the NPT simulation for the initial equilibration of the 
             zero-temperature configuration. Must be strictly greater than zero.
+
+        # TODO: Document arguments and add sensible default values.
         """
+        # Check arguments.
         if not temperature > 0.0:
             raise RuntimeError("Temperature has to be larger than zero.")
         
         if not pressure > 0.0:
             raise RuntimeError("Pressure has to be larger than zero.")
+
+        # TODO: Check all arguments.
         
+        # Repeat atoms in given unit cell.
         atoms = self.atoms[structure_index]
-        
-        """TODO: Guanming puts code here."""
         atoms = atoms.repeat(repeat)
-        proto = self.prototype_label
         
-        # __file__ is the location of the current file
+        # Write lammps file.
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
-        structure_file = os.path.join(TDdirectory,"zero_temperature_crystal.lmp")
-        atoms.write(structure_file,format="lammps-data")
-        # TODO: HOW DO WE GET THE .lmp file?
-        
-        # TODO: Should we call the lammps executable explicitly or is there some internal 
-        # to do it (say via self.model)?
-        self.add_masses_to_data_file(structure_file,mass)
+        structure_file = os.path.join(TDdirectory, "zero_temperature_crystal.lmp")
+        atoms.write(structure_file, format="lammps-data")
+        self._add_masses_to_structure_file(structure_file, mass)
+
         ####################################################
         # ACTUAL CALCULATION BEGINS 
         ####################################################
+        # TODO: Possibly remove this when everything is finished.
         original_cell = atoms.get_cell() # do this instead of deepcopy
         natoms = len(atoms)
         
         # LAMMPS for heat capacity
-        seed = np.random.randint(0, 1000)
-        pdamp = timestep * 100
-        tdamp = timestep * 100
+        if seed is None:
+            # Get random 64-bit unsigned integer.
+            seed = random.getrandbits(64)
+            
+        # TODO: Move damping factors to argument.
+        pdamp = timestep * 100.0
+        tdamp = timestep * 1000.0
 
-        # NPT simulation
-        lmp_npt = 'modelname ${model_name} temperature ${temperature} temperature_seed ${seed} temperature_damping ${tdamp} pressure ${pressure} pressure_damping ${pdamp} timestep ${timestep} number_control_timesteps ${number_control_timesteps}'
-        script = 'npt_equilibration.lammps'
-        command = 'lammps -var %s -in %s'%(lmp_npt, script)
+        # Run NPT simulation.
+        variables = {
+            "modelname": self.model_name,
+            "temperature": temperature,
+            "temperature_seed": seed,
+            "temperature_damping": tdamp,
+            "pressure": pressure,
+            "pressure_damping": pdamp,
+            "timestep": timestep,
+            "number_control_timesteps": number_control_timesteps
+        }
+        # TODO: Possibly run MPI version of Lammps if available.
+        command = (
+            "lammps" 
+            + " ".join(f"-var {key} {item}" for key, item in variables.items()) 
+            + " -in npt_equilibration.lammps")
         subprocess.run(command, check=True, shell=True)
 
         # Check symmetry - post-NPT
@@ -91,7 +110,6 @@ class HeatCapacityPhonon(CrystalGenomeTest):
 
         # Check symmetry - post-NVT
         try:
-
             self._update_aflow_designation_from_atoms(structure_index,atoms_new)
             raise RuntimeError("Symmetry of crystal changed during NVT equilibration!")
 
@@ -147,27 +165,16 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         ####################################################
         # PROPERTY WRITING END
         ####################################################
-       # add masses to data file
-    def add_masses_to_data_file(self,data_file,masses):
-        TDdirectory = os.path.dirname(os.path.realpath(__file__))
-        structure_file = os.path.join(TDdirectory,data_file)
     
-        with open(structure_file,"r") as infile:
-            data = infile.readlines()
-   
-        mass_lines = []
-        mass_lines.append("\n")
-        mass_lines.append("Masses \n")
-        mass_lines.append("\n")
+    @staticmethod
+    def _add_masses_to_structure_file(structure_file: str, masses: Iterable[float]) -> None:
+        with open(structure_file, "a") as file:
+            print()
+            print("Masses")
+            print()
+            for i, mass in enumerate(masses):
+                print(f"    {i+1} {mass}")
 
-        for i in range(1,len(masses)+1):
-            mass_lines.append("    "+str(i)+" "+str(masses[i-1])+"\n")
-
-        mass_lines.append("\n")
-    
-        all_lines = data + mass_lines
-        with open(structure_file,"w") as outfile:
-            outfile.writelines(all_lines)
 
 if __name__ == "__main__":
     ####################################################
@@ -182,5 +189,5 @@ if __name__ == "__main__":
     atoms1 = bulk('NaCl','rocksalt',a=4.58)
     atoms2 = bulk('NaCl','cesiumchloride',a=4.58)
     test = HeatCapacityPhonon(model_name="Sim_LAMMPS_EIM_Zhou_2010_BrClCsFIKLiNaRb__SM_259779394709_000", atoms=atoms1)
-    test(temperature = 298, pressure = 1.0, mass = atoms1.get_masses(),timestep=0.001, number_control_timesteps=10,repeat=(3,3,3))
+    test(temperature = 298, pressure = 1.0, mass = atoms1.get_masses(), timestep=0.001, number_control_timesteps=10, repeat=(3,3,3))
 

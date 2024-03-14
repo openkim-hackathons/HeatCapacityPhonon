@@ -19,6 +19,11 @@ kim interactions ${species}
 # Sample initial velocities.
 velocity all create $(temperature*v__u_temperature) ${temperature_seed}
 
+# Temperature may be off because of rigid bodies or SHAKE constraints.
+# See https://docs.lammps.org/velocity.html
+run 0
+velocity all scale $(temperature*v__u_temperature)
+
 # Equilibrate in NPT ensemble.
 fix NPT all npt temp $(temperature*v__u_temperature) $(temperature*v__u_temperature) $(temperature_damping*v__u_time) &
                 iso $(pressure*v__u_pressure) $(pressure*v__u_pressure) $(pressure_damping*v__u_time)
