@@ -1,5 +1,5 @@
 # Set up logging.
-log lammps_equilibration.log
+log output/lammps_equilibration.log
 
 # Set the OpenKIM model and units that will be used.
 kim init ${modelname} metal unit_conversion_mode
@@ -11,28 +11,39 @@ boundary p p p
 neigh_modify delay 0 every 1 check yes one 2000
 
 # Read initial zero-temperature crystal.
-read_data zero_temperature_crystal.lmp
+read_data output/zero_temperature_crystal.lmp
+
+# TODO: The following does not work for orthogonal boxes.
+
+# Convert box and all atomic positions to the correct units.
+change_box all x scale ${_u_distance} &
+               y scale ${_u_distance} &
+               z scale ${_u_distance} &
+               remap
+               #xy final $(xy*v__u_distance) &
+               #xz final $(xz*v__u_distance) &
+               #yz final $(yz*v__u_distance) &
+               #remap
 
 # Interatomic potential and neighbor settings
 kim interactions ${species}
 
 # Sample initial velocities.
-velocity all create $(temperature*v__u_temperature) ${temperature_seed}
+velocity all create $(v_temperature*v__u_temperature) ${temperature_seed}
 
 # Temperature may be off because of rigid bodies or SHAKE constraints.
 # See https://docs.lammps.org/velocity.html
 run 0
-velocity all scale $(temperature*v__u_temperature)
+velocity all scale $(v_temperature*v__u_temperature)
 
 # Equilibrate in NPT ensemble.
-fix NPT all npt temp $(temperature*v__u_temperature) $(temperature*v__u_temperature) $(temperature_damping*v__u_time) &
-                iso $(pressure*v__u_pressure) $(pressure*v__u_pressure) $(pressure_damping*v__u_time)
+fix NPT all npt temp $(v_temperature*v__u_temperature) $(v_temperature*v__u_temperature) $(v_temperature_damping*v__u_time) &
+                iso $(v_pressure*v__u_pressure) $(v_pressure*v__u_pressure) $(v_pressure_damping*v__u_time)
 
 # Define variables in proper units.
-variable pe_metal equal pe/${_u_energy}
-variable ke_metal equal ke/${_u_energy}
-variable temp_metal equal temp/${_u_temperature}
-variable press_metal equal press/${_u_pressure}
+variable pe_metal equal "c_thermo_pe/v__u_energy"
+variable temp_metal equal "c_thermo_temp/v__u_temperature"
+variable press_metal equal "c_thermo_press/v__u_pressure"
 variable vol_metal equal vol/${_u_distance}/${_u_distance}/${_u_distance}
 variable xlo_metal equal xlo/${_u_distance}
 variable xhi_metal equal xhi/${_u_distance}
@@ -42,7 +53,7 @@ variable zlo_metal equal zlo/${_u_distance}
 variable zhi_metal equal zhi/${_u_distance}
 
 # Set up logging of thermodynamic information.
-thermo_style custom step v_pe_metal v_ke_metal v_temp_metal v_press_metal v_vol_metal &
+thermo_style custom step v_pe_metal v_temp_metal v_press_metal v_vol_metal &
                          v_xlo_metal v_xhi_metal v_ylo_metal v_yhi_metal v_zlo_metal v_zhi_metal
 thermo ${number_sampling_timesteps}
 
@@ -50,27 +61,31 @@ thermo ${number_sampling_timesteps}
 compute unwrappedPos all property/atom xu yu zu
 
 # Average the unwrapped positions.
-fix avePos all ave/atom 1 ${number_control_timesteps} ${number_control_timesteps} c_unwrappedPos[0] c_unwrappedPos[1] c_unwrappedPos[2]
+fix avePos all ave/atom 1 ${number_control_timesteps} ${number_control_timesteps} c_unwrappedPos[1] c_unwrappedPos[2] c_unwrappedPos[3]
 
 # Set timestep.
-timestep $(timestep*v__u_time)
+timestep $(v_timestep*v__u_time)
 
 # Set up convergence check with kim-convergence.
-python run_length_control input 4 SELF ${number_control_timesteps} variable v_vol_metal format piss file run_length_control.py
+python run_length_control input 4 SELF ${number_control_timesteps} variable vol_metal format piss file run_length_control.py
 
 # Run until converged.
 python run_length_control invoke
 
-# TODO: Store final volume?
 # Print the final volume.
-print "$vol" screen no file final_volume.dat
+print ${vol_metal} screen no file output/final_volume.dat
 
 # Dump the average unwrapped positions.
-dump avePosDump all custom 1 average_position.dump id type f_avePos[0] f_avePos[1] f_avePos[2]
+dump avePosDump all custom ${number_control_timesteps} output/average_position.dump id type f_avePos[1] f_avePos[2] f_avePos[3]
 dump_modify avePosDump first yes
 run 0
 
-# Write the initial starting file for a true simulation.
-reset_timestep 0
+# Reset.
 unfix NPT
-write_restart equilibrated.restart
+unfix avePos
+unfix cr_fix  # From run_length_control.py
+undump avePosDump
+reset_timestep 0
+
+# Write the initial starting file for a true simulation.
+write_restart output/equilibrated.restart
