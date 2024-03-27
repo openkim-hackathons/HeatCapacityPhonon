@@ -93,7 +93,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
 
         # Check symmetry - post-NPT
         # TODO: Fix loading txt according to created dump file.
-        new_pos = np.sort(np.loadtxt('average_position.dump', skiprows=9), 1)
+        new_pos = sorted(np.loadtxt('average_position.dump', skiprows=9).tolist(), key = lambda x : x[0])
         atoms_new = atoms.deepcopy()
         atoms_new.set_positions([(line[2], line[3], line[4]) for line in new_pos])
 
