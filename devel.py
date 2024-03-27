@@ -101,8 +101,8 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             + " -in npt_equilibration.lammps")
         subprocess.run(command, check=True, shell=True)
 
-        exit()
-        
+        exit()  
+        '''
         # Check symmetry - post-NPT
         # TODO: Fix loading txt according to created dump file.
         atoms = self.atoms[structure_index]
@@ -124,6 +124,14 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             xy = new_cell[0,2]
             xz = new_cell[1,2]
             yz = new_cell[2,2]
+        
+        else:
+            xy = 0
+            xz = 0
+            yz = 0
+
+        # Update cell
+        atoms.set_cell(self._get_cell(x_lo, x_hi, y_lo, y_hi, z_lo, z_hi, xy, xz, yz))
 
         try:
 
