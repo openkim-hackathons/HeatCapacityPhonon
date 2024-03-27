@@ -40,12 +40,16 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # Repeat atoms in given unit cell.
         atoms = self.atoms[structure_index]
         # TODO: Ask whether this is the correct way.
-        species_of_each_atom = atoms.get_chemical_symbols()
+        # TODO: Filter out repeated species.
+        # TODO: Just get the species as a test argument (they are definitely alphabetically ordered).
+        # TODO: They changed the atoms object so this might actually be fixed.
+        species_of_each_atom = atoms.get_chemical_symbols()[:1]
         atoms = atoms.repeat(repeat)
         
         # Write lammps file.
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
         structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
+        # TODO: Look at documentation of this.
         atoms.write(structure_file, format="lammps-data")
         self._add_masses_to_structure_file(structure_file, mass)
 
@@ -89,9 +93,9 @@ class HeatCapacityPhonon(CrystalGenomeTest):
 
         # Check symmetry - post-NPT
         # TODO: Fix loading txt according to created dump file.
-        output = np.loadtxt('average_position.dump')
-        new_species = []
-        new_pos = []
+        new_pos = sorted(np.loadtxt('average_position.dump', skiprows=9).tolist(), key = lambda x : x[0])
+        atoms_new = atoms.deepcopy()
+        atoms_new.set_positions([(line[2], line[3], line[4]) for line in new_pos])
 
         for line in output:
             new_species.append(output[i][0])
@@ -176,12 +180,14 @@ class HeatCapacityPhonon(CrystalGenomeTest):
     
     @staticmethod
     def _add_masses_to_structure_file(structure_file: str, masses: Iterable[float]) -> None:
+        # TODO: This does not always work... (especially when cube is included in atoms)
         with open(structure_file, "a") as file:
             print(file=file)
             print("Masses", file=file)
             print(file=file)
             for i, mass in enumerate(masses):
                 print(f"    {i+1} {mass}", file=file)
+                break
 
 
 if __name__ == "__main__":
@@ -194,15 +200,14 @@ if __name__ == "__main__":
     # test = BindingEnergyVsWignerSeitzRadius(model_name="MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002", stoichiometric_species=['Fe','P'], prototype_label='AB_oP8_62_c_c')
                     
     # Alternatively, for debugging, give it atoms object or a list of atoms objects
-    atoms1 = bulk('NaCl','rocksalt',a=4.58)
+    atoms = bulk('NaCl','rocksalt',a=4.58)
     atoms2 = bulk('NaCl','cesiumchloride',a=4.58)
     model_name = "Sim_LAMMPS_EIM_Zhou_2010_BrClCsFIKLiNaRb__SM_259779394709_000"
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
-
-    atoms = bulk("Ar", "sc", a=3.6343565881252293)
+    atoms = bulk("Ar", "fcc", a=5.248, cubic=True)
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
     test = HeatCapacityPhonon(model_name=model_name, atoms=atoms)
-    test(temperature = 298.0, pressure = 1.0, mass = atoms.get_masses(), 
+    test(temperature = 10.0, pressure = 1.0, mass = atoms.get_masses(), 
          timestep=0.001, number_control_timesteps=10, number_sampling_timesteps=10,
          repeat=(5,5,5))
 
