@@ -9,6 +9,14 @@ from kim_python_utils.ase import CrystalGenomeTest, KIMASEError
 
 
 class HeatCapacityPhonon(CrystalGenomeTest):
+    @staticmethod
+        # See https://docs.lammps.org/Howto_triclinic.html.
+        cell = np.empty(shape=(3, 3))
+        cell[0, :] = np.array([xhi - xlo, 0.0, 0.0])
+        cell[1, :] = np.array([xy, yhi - ylo, 0.0])
+        cell[2, :] = np.array([xz, yz, zhi - zlo])
+        return Cell.new(cell=cell)
+
     def _calculate(self, structure_index: int, temperature: float, pressure: float, 
                    mass: Iterable[float], timestep: float, number_control_timesteps: int, 
                    number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3,3,3), 
