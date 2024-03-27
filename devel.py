@@ -21,6 +21,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
                    mass: Iterable[float], timestep: float, number_control_timesteps: int, 
                    number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3,3,3), 
                    seed: Optional[int] = None) -> None:
+        
         """
         structure_index:
             KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). 
@@ -36,6 +37,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
 
         # TODO: Document arguments and add sensible default values.
         """
+        '''
         # Check arguments.
         if not temperature > 0.0:
             raise RuntimeError("Temperature has to be larger than zero.")
@@ -98,22 +100,32 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         subprocess.run(command, check=True, shell=True)
 
         exit()
-
+        '''
         # Check symmetry - post-NPT
         # TODO: Fix loading txt according to created dump file.
-        new_pos = sorted(np.loadtxt('average_position.dump', skiprows=9).tolist(), key = lambda x : x[0])
-        atoms_new = atoms.deepcopy()
-        atoms_new.set_positions([(line[2], line[3], line[4]) for line in new_pos])
+        atoms = self.atoms[structure_index]
+        atoms = atoms.repeat(repeat)
+        new_pos = sorted(np.loadtxt('output/average_position.dump', skiprows=9).tolist(), key = lambda x : x[0])     
+        atoms.set_positions([(line[2], line[3], line[4]) for line in new_pos])
+        new_cell = np.loadtxt('output/average_position.dump', skiprows=5, max_rows=3)
 
-        for line in output:
-            new_species.append(output[i][0])
-            new_pos.append([output[i,1], output[i,2], output[i,3]])
+        # Save cell parameters
+        x_lo = new_cell[0,0]
+        x_hi = new_cell[0,1]
+        y_lo = new_cell[1,0]
+        y_hi = new_cell[1,1]
+        z_lo = new_cell[2,0]
+        z_hi = new_cell[2,1]
 
-        new_atom = bulk()
+        # If not cubic add more cell params
+        if new_cell.shape[-1] != 2:
+            xy = new_cell[0,2]
+            xz = new_cell[1,2]
+            yz = new_cell[2,2]
 
         try:
 
-            self._update_aflow_designation_from_atoms(structure_index,atoms_new)
+            self._update_aflow_designation_from_atoms()
             raise RuntimeError("Symmetry of crystal changed during NPT equilibration!")
 
         except KIMASEError as e:
