@@ -92,7 +92,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         subprocess.run(command, check=True, shell=True)
 
         exit()
-        '''
+        
         # Check symmetry - post-NPT
         # TODO: Fix loading txt according to created dump file.
         atoms = self.atoms[structure_index]
