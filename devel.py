@@ -93,9 +93,9 @@ class HeatCapacityPhonon(CrystalGenomeTest):
 
         # Check symmetry - post-NPT
         # TODO: Fix loading txt according to created dump file.
-        output = np.loadtxt('average_position.dump')
-        new_species = []
-        new_pos = []
+        new_pos = np.sort(np.loadtxt('average_position.dump', skiprows=9), 1)
+        atoms_new = atoms.deepcopy()
+        atoms_new.set_positions([(line[2], line[3], line[4]) for line in new_pos])
 
         for line in output:
             new_species.append(output[i][0])
@@ -207,7 +207,7 @@ if __name__ == "__main__":
     atoms = bulk("Ar", "fcc", a=5.248, cubic=True)
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
     test = HeatCapacityPhonon(model_name=model_name, atoms=atoms)
-    test(temperature = 50.0, pressure = 1.0, mass = atoms.get_masses(), 
+    test(temperature = 10.0, pressure = 1.0, mass = atoms.get_masses(), 
          timestep=0.001, number_control_timesteps=10, number_sampling_timesteps=10,
          repeat=(5,5,5))
 
