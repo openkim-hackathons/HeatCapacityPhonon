@@ -5,11 +5,13 @@ from typing import Iterable, Optional, Tuple, Sequence
 import uuid
 import numpy as np
 from ase.build import bulk
+from ase.cell import Cell
 from kim_python_utils.ase import CrystalGenomeTest, KIMASEError
 
 
 class HeatCapacityPhonon(CrystalGenomeTest):
     @staticmethod
+    def _get_cell(xlo, xhi, ylo, yhi, zlo, zhi, xy, xz, yz):
         # See https://docs.lammps.org/Howto_triclinic.html.
         cell = np.empty(shape=(3, 3))
         cell[0, :] = np.array([xhi - xlo, 0.0, 0.0])
