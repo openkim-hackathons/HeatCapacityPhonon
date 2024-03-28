@@ -93,6 +93,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         
         # TODO: INCREASE kim-convergence runs so that we don't get these weird oscillations in volume?
         subprocess.run(command, check=True, shell=True)
+        self._extract_and_plot() 
         
         # Check symmetry - post-NPT
         atoms_new.set_positions(self._get_positions_from_lammps_dump("output/average_position.dump"))
@@ -178,6 +179,13 @@ class HeatCapacityPhonon(CrystalGenomeTest):
                 print(f"    {i+1} {mass}", file=file)
                 # TODO: Remove this hack at some point.
                 break
+    
+    @staticmethod
+    def _extract_and_plot(property_name: str = "v_vol_metal") -> None:
+        # extract data and save it as png file
+        subprocess.check_output(["python","./extract_table.py","./output/lammps_equilibration.log",
+                                 "./output/lammps_equilibration.csv",property_name])
+
 
     @staticmethod
     def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
