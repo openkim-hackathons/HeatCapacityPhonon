@@ -3,3 +3,5 @@ equilibrated.restart
 final_volume.dat
 lammps_equilibration.log
 zero_temperature_crystal.lmp
+*.png
+lammps_equilibration.csv
