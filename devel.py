@@ -88,8 +88,9 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_equilibration.lammps")
         subprocess.run(command, check=True, shell=True)
-
-        exit()
+         
+        # I put it before exit() so it can run, maybe we can move it to 
+        exit() 
 
         # Check symmetry - post-NPT
         # TODO: Fix loading txt according to created dump file.
@@ -177,7 +178,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         ####################################################
         # PROPERTY WRITING END
         ####################################################
-    
+
     @staticmethod
     def _add_masses_to_structure_file(structure_file: str, masses: Iterable[float]) -> None:
         # TODO: This does not always work... (especially when cube is included in atoms)
@@ -188,6 +189,11 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             for i, mass in enumerate(masses):
                 print(f"    {i+1} {mass}", file=file)
                 break
+    def _extract_and_plot(self,property_name = "v_vol_metal"):
+        # extract data and save it as png file
+        subprocess.check_output(["python","./extract_table.py","./output/lammps_equilibration.log",
+                                 "./output/lammps_equilibration.csv",property_name])
+
 
 
 if __name__ == "__main__":
@@ -210,4 +216,6 @@ if __name__ == "__main__":
     test(temperature = 10.0, pressure = 1.0, mass = atoms.get_masses(), 
          timestep=0.001, number_control_timesteps=10, number_sampling_timesteps=10,
          repeat=(5,5,5))
+    subprocess.check_output(["python","./extract_table.py","./output/lammps_equilibration.log",
+                                 "./output/lammps_equilibration.csv","v_vol_metal"])
 
