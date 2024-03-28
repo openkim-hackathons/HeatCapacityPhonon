@@ -183,9 +183,8 @@ class HeatCapacityPhonon(CrystalGenomeTest):
     @staticmethod
     def _extract_and_plot(property_name: str = "v_vol_metal") -> None:
         # extract data and save it as png file
-        subprocess.check_output(["python","./extract_table.py","./output/lammps_equilibration.log",
-                                 "./output/lammps_equilibration.csv",property_name])
-
+        subprocess.run(f"python extract_table.py output/lammps_equilibration.log "
+                       f"output/lammps_equilibration.csv {property_name}", check=True, shell=True)
 
     @staticmethod
     def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
