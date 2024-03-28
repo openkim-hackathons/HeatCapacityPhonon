@@ -1,29 +1,20 @@
 import os
 import random
 import subprocess
-from typing import Iterable, Optional, Tuple, Sequence
+from typing import Iterable, List, Optional, Tuple, Sequence
 import uuid
 import numpy as np
+import numpy.typing as npt
+from ase import Atoms
 from ase.build import bulk
 from ase.cell import Cell
 from kim_python_utils.ase import CrystalGenomeTest, KIMASEError
 
 
 class HeatCapacityPhonon(CrystalGenomeTest):
-    @staticmethod
-    def _get_cell(xlo, xhi, ylo, yhi, zlo, zhi, xy, xz, yz):
-        # See https://docs.lammps.org/Howto_triclinic.html.
-        cell = np.empty(shape=(3, 3))
-        cell[0, :] = np.array([xhi - xlo, 0.0, 0.0])
-        cell[1, :] = np.array([xy, yhi - ylo, 0.0])
-        cell[2, :] = np.array([xz, yz, zhi - zlo])
-        return Cell.new(cell=cell)
-
-    def _calculate(self, structure_index: int, temperature: float, pressure: float, 
-                   mass: Iterable[float], timestep: float, number_control_timesteps: int, 
-                   number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3,3,3), 
-                   seed: Optional[int] = None) -> None:
-        
+    def _calculate(self, structure_index: int, temperature: float, pressure: float, timestep: float, 
+                   number_control_timesteps: int, number_sampling_timesteps: int, 
+                   repeat: Tuple[int, int, int] = (3, 3, 3), seed: Optional[int] = None) -> None:
         """
         structure_index:
             KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). 
@@ -39,7 +30,6 @@ class HeatCapacityPhonon(CrystalGenomeTest):
 
         # TODO: Document arguments and add sensible default values.
         """
-        '''
         # Check arguments.
         if not temperature > 0.0:
             raise RuntimeError("Temperature has to be larger than zero.")
@@ -49,28 +39,29 @@ class HeatCapacityPhonon(CrystalGenomeTest):
 
         # TODO: Check all arguments.
         
-        # Repeat atoms in given unit cell.
-        atoms = self.atoms[structure_index]
         # TODO: Ask whether this is the correct way.
         # TODO: Filter out repeated species.
         # TODO: Just get the species as a test argument (they are definitely alphabetically ordered).
         # TODO: They changed the atoms object so this might actually be fixed.
+        # Get species and masses of the atoms.
+        atoms = self.atoms[structure_index]
+        # TODO: Remove this hack at some point.
         species_of_each_atom = atoms.get_chemical_symbols()[:1]
-        atoms = atoms.repeat(repeat)
+        masses = atoms.get_masses()
+        
+        # Copy original atoms so that their information does not get lost when the new atoms are modified.
+        atoms_new = atoms.copy()
+        
+        # UNCOMMENT THIS TO TEST A TRICLINIC STRUCTURE!
+        # atoms_new = bulk("Ar", "fcc", a=5.248)
+        
+        atoms_new = atoms_new.repeat(repeat)
         
         # Write lammps file.
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
         structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
-        # TODO: Look at documentation of this.
-        atoms.write(structure_file, format="lammps-data")
-        self._add_masses_to_structure_file(structure_file, mass)
-
-        ####################################################
-        # ACTUAL CALCULATION BEGINS 
-        ####################################################
-        # TODO: Possibly remove this when everything is finished.
-        original_cell = atoms.get_cell() # do this instead of deepcopy
-        natoms = len(atoms)
+        atoms_new.write(structure_file, format="lammps-data")
+        self._add_masses_to_structure_file(structure_file, masses)
         
         # LAMMPS for heat capacity
         if seed is None:
@@ -99,41 +90,16 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             "lammps " 
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_equilibration.lammps")
+        
+        # TODO: INCREASE kim-convergence runs so that we don't get these weird oscillations in volume?
         subprocess.run(command, check=True, shell=True)
-
-        exit()
         
         # Check symmetry - post-NPT
-        # TODO: Fix loading txt according to created dump file.
-        atoms = self.atoms[structure_index]
-        atoms = atoms.repeat(repeat)
-        new_pos = sorted(np.loadtxt('output/average_position.dump', skiprows=9).tolist(), key = lambda x : x[0])     
-        atoms.set_positions([(line[2], line[3], line[4]) for line in new_pos])
-        new_cell = np.loadtxt('output/average_position.dump', skiprows=5, max_rows=3)
-
-        # Save cell parameters
-        x_lo = new_cell[0,0]
-        x_hi = new_cell[0,1]
-        y_lo = new_cell[1,0]
-        y_hi = new_cell[1,1]
-        z_lo = new_cell[2,0]
-        z_hi = new_cell[2,1]
-
-        # If not cubic add more cell params
-        if new_cell.shape[-1] != 2:
-            xy = new_cell[0,2]
-            xz = new_cell[1,2]
-            yz = new_cell[2,2]
-
-        try:
-
-            self._update_aflow_designation_from_atoms()
-            raise RuntimeError("Symmetry of crystal changed during NPT equilibration!")
-
-        except KIMASEError as e:
-            print("We have successfully caught an exception with the following message:")
-            print(e.msg)
-
+        atoms_new.set_positions(self._get_positions_from_lammps_dump("output/average_position.dump"))
+        atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position.dump"))
+        self._update_aflow_designation_from_atoms(structure_index, atoms_new)
+        
+        """
         # NVT simulation
         vol = np.loadtxt('volume.dat')
 
@@ -199,6 +165,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         ####################################################
         # PROPERTY WRITING END
         ####################################################
+        """
     
     @staticmethod
     def _add_masses_to_structure_file(structure_file: str, masses: Iterable[float]) -> None:
@@ -209,27 +176,88 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             print(file=file)
             for i, mass in enumerate(masses):
                 print(f"    {i+1} {mass}", file=file)
+                # TODO: Remove this hack at some point.
                 break
+
+    @staticmethod
+    def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
+        lines = sorted(np.loadtxt(filename, skiprows=9).tolist(), key = lambda x: x[0])     
+        return [(line[2], line[3], line[4]) for line in lines]
+
+    @staticmethod
+    def _get_cell_from_lammps_dump(filename: str) -> npt.NDArray[float]:
+        new_cell = np.loadtxt(filename, skiprows=5, max_rows=3)
+        assert new_cell.shape == (3, 2) or new_cell.shape == (3, 3)
+
+        # Save cell parameters
+        xlo = new_cell[0,0]
+        xhi = new_cell[0,1]
+        ylo = new_cell[1,0]
+        yhi = new_cell[1,1]
+        zlo = new_cell[2,0]
+        zhi = new_cell[2,1]
+
+        # If not cubic add more cell params
+        if new_cell.shape[-1] != 2:
+            xy = new_cell[0,2]
+            xz = new_cell[1,2]
+            yz = new_cell[2,2]
+        else:
+            xy = 0.0
+            xz = 0.0
+            yz = 0.0
+
+        # See https://docs.lammps.org/Howto_triclinic.html.
+        cell = np.empty(shape=(3, 3))
+        cell[0, :] = np.array([xhi - xlo, 0.0, 0.0])
+        cell[1, :] = np.array([xy, yhi - ylo, 0.0])
+        cell[2, :] = np.array([xz, yz, zhi - zlo])
+        return cell
+
+    @staticmethod
+    def _set_atoms_from_lmp_file(atoms: Atoms, lmp_file: str) -> None:
+        # HACKY!
+        pos = np.loadtxt(lmp_file, skiprows=12, max_rows=len(atoms))
+        atoms.set_positions([pos[i, 2:] for i in range(len(atoms))])
+        with open(lmp_file, "r") as file:
+            for index, line in enumerate(file):
+                if index == 4:
+                    ls = line.split()
+                    assert len(ls) == 4
+                    xlo = float(ls[0])
+                    xhi = float(ls[1])
+                elif index == 5:
+                    ls = line.split()
+                    assert len(ls) == 4
+                    ylo = float(ls[0])
+                    yhi = float(ls[1])
+                elif index == 6:
+                    ls = line.split()
+                    assert len(ls) == 4
+                    zlo = float(ls[0])
+                    zhi = float(ls[1])
+                elif index == 7:
+                    ls = line.split()
+                    assert len(ls) == 6
+                    xy = float(ls[0])
+                    xz = float(ls[1])
+                    yz = float(ls[2])
+        cell = np.empty(shape=(3, 3))
+        cell[0, :] = np.array([xhi - xlo, 0.0, 0.0])
+        cell[1, :] = np.array([xy, yhi - ylo, 0.0])
+        cell[2, :] = np.array([xz, yz, zhi - zlo])
+        atoms.set_cell(cell)
 
 
 if __name__ == "__main__":
-    ####################################################
-    # if called directly, do some debugging examples
-    ####################################################
+    atoms = bulk("AlCo", "cesiumchloride", a=2.8663, cubic=True)
+    model_name = "EAM_Dynamo_VailheFarkas_1997_CoAl__MO_284963179498_005"
 
-
-    # This queries for equilibrium structures in this prototype and builds atoms
-    # test = BindingEnergyVsWignerSeitzRadius(model_name="MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002", stoichiometric_species=['Fe','P'], prototype_label='AB_oP8_62_c_c')
-                    
-    # Alternatively, for debugging, give it atoms object or a list of atoms objects
-    atoms = bulk('NaCl','rocksalt',a=4.58)
-    atoms2 = bulk('NaCl','cesiumchloride',a=4.58)
-    model_name = "Sim_LAMMPS_EIM_Zhou_2010_BrClCsFIKLiNaRb__SM_259779394709_000"
-    model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
     atoms = bulk("Ar", "fcc", a=5.248, cubic=True)
-    subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
-    test = HeatCapacityPhonon(model_name=model_name, atoms=atoms)
-    test(temperature = 10.0, pressure = 1.0, mass = atoms.get_masses(), 
-         timestep=0.001, number_control_timesteps=10, number_sampling_timesteps=10,
-         repeat=(5,5,5))
+    model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
 
+    subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
+
+    test = HeatCapacityPhonon(model_name=model_name, atoms=atoms)
+    test(temperature = 1.0, pressure = 1.0, timestep=0.001, number_control_timesteps=10, 
+         number_sampling_timesteps=10, repeat=(5, 5, 5))
