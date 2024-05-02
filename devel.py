@@ -88,15 +88,9 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         print(natoms)
         
         # UNCOMMENT THIS TO TEST A TRICLINIC STRUCTURE!
-        atoms_new = bulk('Ar', 'fcc', a=5.248)
+        #atoms_new = bulk('Ar', 'fcc', a=5.248)
         unit_cell = atoms_new.get_cell()
-        print(unit_cell)
-        print(atoms_new.get_positions())
-        atoms_new = atoms_new.repeat(repeat)
-        prim_cell = self.reduce_and_avg(atoms_new, unit_cell, natoms, repeat)
-        print(prim_cell)
   
-
         # Write lammps file.
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
         structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
@@ -138,9 +132,15 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # Check symmetry - post-NPT
         atoms_new.set_positions(self._get_positions_from_lammps_dump("output/average_position.dump"))
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position.dump"))
+        unit_cell = atoms_new.get_cell()
+
+        # Reduce and average
+        prim_cell = self.reduce_and_avg(atoms_new, unit_cell,len(atoms_new), repeat)
+        atoms_new.set_positions(prim_cell)
 
         # ASE Symmetry check
-        print(comp.compare(benchmark, atoms_new))
+        comp = sc.SymmetryEquivalenceCheck()
+        comp.compare(atoms, atoms_new)
 
         # AFLOW Symmetry check
         self._update_aflow_designation_from_atoms(structure_index, atoms_new)
