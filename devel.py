@@ -8,6 +8,7 @@ import numpy.typing as npt
 from ase import Atoms
 from ase.build import bulk
 from ase.cell import Cell
+from ase.utils import structure_comparator as sc
 from kim_python_utils.ase import CrystalGenomeTest, KIMASEError
 
 
@@ -98,6 +99,12 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # Check symmetry - post-NPT
         atoms_new.set_positions(self._get_positions_from_lammps_dump("output/average_position.dump"))
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position.dump"))
+
+        # ASE Symmetry check
+        comp = sc.SymmetryEquivalenceCheck()
+        comp.compare(atoms, atoms_new)
+
+        # AFLOW Symmetry check
         self._update_aflow_designation_from_atoms(structure_index, atoms_new)
         
         """
