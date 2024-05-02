@@ -39,7 +39,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             for d in range(3):
 
                 # Add to prim_cell
-                prim_cell[i % n][d] += (atoms.get_scaled_positions()[i][d] * unit_cell[d][d]) / M
+                prim_cell[i % n][d] += (atoms.get_scaled_positions()[i][d] * sum(unit_cell[j][d]) for j in range(3)) / M
 
         # Return primitive cell
         return prim_cell
@@ -85,17 +85,17 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         
         # Copy original atoms so that their information does not get lost when the new atoms are modified.
         atoms_new = atoms.copy()
+        print(natoms)
         
         # UNCOMMENT THIS TO TEST A TRICLINIC STRUCTURE!
         atoms_new = bulk('Ar', 'fcc', a=5.248)
-        print(atoms_new.get_positions())
         unit_cell = atoms_new.get_cell()
+        print(unit_cell)
         print(atoms_new.get_positions())
         atoms_new = atoms_new.repeat(repeat)
         prim_cell = self.reduce_and_avg(atoms_new, unit_cell, natoms, repeat)
         print(prim_cell)
-        
-        return
+  
 
         # Write lammps file.
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
@@ -305,7 +305,7 @@ if __name__ == "__main__":
     atoms = bulk("AlCo", "cesiumchloride", a=2.8663, cubic=True)
     model_name = "EAM_Dynamo_VailheFarkas_1997_CoAl__MO_284963179498_005"
 
-    atoms = bulk("Ar", "fcc", a=5.248, cubic=True)
+    atoms = bulk("Ar", "fcc", a=5.248)
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
 
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
