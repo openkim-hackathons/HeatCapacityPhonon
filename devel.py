@@ -35,11 +35,11 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         M = np.prod(repeat)
 
         # Iterate over all atoms and sum
-        for i in range(atoms):
+        for i in range(len(atoms)):
             for d in range(3):
 
                 # Add to prim_cell
-                prim_cell[i % n][d] += atoms.get_scaled_positions()[i][d] / M
+                prim_cell[i % n][d] += (atoms.get_scaled_positions()[i][d] * unit_cell[d][d]) / M
 
         # Return primitive cell
         return prim_cell
@@ -78,6 +78,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # TODO: They changed the atoms object so this might actually be fixed.
         # Get species and masses of the atoms.
         atoms = self.atoms[structure_index]
+        natoms = len(atoms)
         # TODO: Remove this hack at some point.
         species_of_each_atom = atoms.get_chemical_symbols()[:1]
         masses = atoms.get_masses()
@@ -86,20 +87,13 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         atoms_new = atoms.copy()
         
         # UNCOMMENT THIS TO TEST A TRICLINIC STRUCTURE!
-        # atoms_new = bulk("Ar", "fcc", a=5.248)
-        
-        comp = sc.SymmetryEquivalenceCheck()
-        print(comp.compare(atoms, atoms_new))
+        atoms_new = bulk('Ar', 'fcc', a=5.248)
+        print(atoms_new.get_positions())
         unit_cell = atoms_new.get_cell()
-        print(atoms_new.get_cell())
         print(atoms_new.get_positions())
         atoms_new = atoms_new.repeat(repeat)
-        benchmark = atoms_new
-        atoms_new.set_cell(unit_cell)
-        atoms_new.set_pbc((True, True, True))
-        print(atoms.get_pbc())
-        print(atoms_new.get_cell())
-        print(atoms_new.get_scaled_positions())
+        prim_cell = self.reduce_and_avg(atoms_new, unit_cell, natoms, repeat)
+        print(prim_cell)
         
         return
 
