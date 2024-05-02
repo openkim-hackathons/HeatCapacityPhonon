@@ -12,7 +12,7 @@ from ase.utils import structure_comparator as sc
 from kim_python_utils.ase import CrystalGenomeTest, KIMASEError
 
 class HeatCapacityPhonon(CrystalGenomeTest):
-    def reduce_and_avg(self, atoms, unit_cell, n, repeat):
+    def reduce_and_avg(self, atoms, n, repeat):
         '''
         Function to reduce all atoms to unit cell position and return averaged unit cell
 
@@ -25,7 +25,8 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         '''
 
         # Scale bulk
-        atoms.set_cell(unit_cell)
+        unit_cell = atoms.get_cell()
+        unit_cell = [unit_cell[i]/repeat[i] for i in range(repeat)]
         atoms.set_pbc((True, True, True))
 
         # Instantiate primitive cell
@@ -42,7 +43,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
                 prim_cell[i % n][d] += (atoms.get_scaled_positions()[i][d] * sum(unit_cell[j][d]) for j in range(3)) / M
 
         # Return primitive cell
-        return prim_cell
+        atoms.set_positions(prim_cell)
 
 
     def _calculate(self, structure_index: int, temperature: float, pressure: float, timestep: float, 
@@ -132,12 +133,9 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # Check symmetry - post-NPT
         atoms_new.set_positions(self._get_positions_from_lammps_dump("output/average_position.dump"))
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position.dump"))
-        unit_cell = atoms_new.get_cell()
-        unit_cell = [unit_cell[i]/repeat[i] for i in range(3)]
 
         # Reduce and average
-        prim_cell = self.reduce_and_avg(atoms_new, unit_cell,len(atoms_new), repeat)
-        atoms_new.set_positions(prim_cell)
+        self.reduce_and_avg(atoms_new, unit_cell,len(atoms_new), repeat)
 
         # ASE Symmetry check
         comp = sc.SymmetryEquivalenceCheck()
