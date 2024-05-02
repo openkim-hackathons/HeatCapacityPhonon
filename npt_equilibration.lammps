@@ -87,7 +87,7 @@ dump test all custom 1000 output/test.dump.* id xsu ysu zsu v_xsu v_ysu v_zsu
 # Note that kim-convergence interrupts simulations after 1000 timesteps.
 # We write out the average scaled unwrapped positions after every 1000 timesteps.
 fix avePos all ave/atom 1 1000 1000 v_xsu v_ysu v_zsu
-dump avePosDump all custom 1000 output/average_position.dump.* id type f_avePos[1] f_avePos[2] f_avePos[3]
+dump avePosDump all custom 1000 output/average_position.dump.* id f_avePos[1] f_avePos[2] f_avePos[3]
 dump_modify avePosDump first no
 
 # Set timestep.

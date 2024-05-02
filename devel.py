@@ -131,9 +131,14 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         subprocess.run(command, check=True, shell=True)
         self._extract_and_plot() 
         
+        # TODO: Philipp prevents that this file is even created.
+        os.remove("output/average_position.dump.0")
+        # TODO: Guanming changes this into a function call.
+        subprocess.run("python compute_average_positions.py", check=True, shell=True)
+
         # Check symmetry - post-NPT
-        atoms_new.set_positions(self._get_positions_from_lammps_dump("output/average_position.dump"))
-        atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position.dump"))
+        atoms_new.set_positions(self._get_positions_from_lammps_dump("output/average_positions_over_files.out"))
+        atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_positions_over_files.out"))
 
         # Reduce and average
         self.reduce_and_avg(atoms_new, unit_cell,len(atoms_new), repeat)
