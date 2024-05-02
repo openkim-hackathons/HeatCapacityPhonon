@@ -8,10 +8,43 @@ import numpy.typing as npt
 from ase import Atoms
 from ase.build import bulk
 from ase.cell import Cell
+from ase.utils import structure_comparator as sc
 from kim_python_utils.ase import CrystalGenomeTest, KIMASEError
 
-
 class HeatCapacityPhonon(CrystalGenomeTest):
+    def reduce_and_avg(self, atoms, unit_cell, n, repeat):
+        '''
+        Function to reduce all atoms to unit cell position and return averaged unit cell
+
+        @param atoms : repeated atoms object
+        @param unit_cell : unit cell of interest
+        @param n : number of atoms
+        @param repeat : repeat tuple
+
+        @return prim_cell : primitive cell
+        '''
+
+        # Scale bulk
+        atoms.set_cell(unit_cell)
+        atoms.set_pbc((True, True, True))
+
+        # Instantiate primitive cell
+        prim_cell = [[0, 0, 0] for _ in range(n)]
+
+        # Set averaging factor
+        M = np.prod(repeat)
+
+        # Iterate over all atoms and sum
+        for i in range(len(atoms)):
+            for d in range(3):
+
+                # Add to prim_cell
+                prim_cell[i % n][d] += (atoms.get_scaled_positions()[i][d] * sum(unit_cell[j][d]) for j in range(3)) / M
+
+        # Return primitive cell
+        return prim_cell
+
+
     def _calculate(self, structure_index: int, temperature: float, pressure: float, timestep: float, 
                    number_control_timesteps: int, number_sampling_timesteps: int, 
                    repeat: Tuple[int, int, int] = (3, 3, 3), seed: Optional[int] = None) -> None:
@@ -45,18 +78,25 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # TODO: They changed the atoms object so this might actually be fixed.
         # Get species and masses of the atoms.
         atoms = self.atoms[structure_index]
+        natoms = len(atoms)
         # TODO: Remove this hack at some point.
         species_of_each_atom = atoms.get_chemical_symbols()[:1]
         masses = atoms.get_masses()
         
         # Copy original atoms so that their information does not get lost when the new atoms are modified.
         atoms_new = atoms.copy()
+        print(natoms)
         
         # UNCOMMENT THIS TO TEST A TRICLINIC STRUCTURE!
-        # atoms_new = bulk("Ar", "fcc", a=5.248)
-        
+        atoms_new = bulk('Ar', 'fcc', a=5.248)
+        unit_cell = atoms_new.get_cell()
+        print(unit_cell)
+        print(atoms_new.get_positions())
         atoms_new = atoms_new.repeat(repeat)
-        
+        prim_cell = self.reduce_and_avg(atoms_new, unit_cell, natoms, repeat)
+        print(prim_cell)
+  
+
         # Write lammps file.
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
         structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
@@ -98,6 +138,11 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # Check symmetry - post-NPT
         atoms_new.set_positions(self._get_positions_from_lammps_dump("output/average_position.dump"))
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position.dump"))
+
+        # ASE Symmetry check
+        print(comp.compare(benchmark, atoms_new))
+
+        # AFLOW Symmetry check
         self._update_aflow_designation_from_atoms(structure_index, atoms_new)
         
         """
@@ -260,7 +305,7 @@ if __name__ == "__main__":
     atoms = bulk("AlCo", "cesiumchloride", a=2.8663, cubic=True)
     model_name = "EAM_Dynamo_VailheFarkas_1997_CoAl__MO_284963179498_005"
 
-    atoms = bulk("Ar", "fcc", a=5.248, cubic=True)
+    atoms = bulk("Ar", "fcc", a=5.248)
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
 
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
