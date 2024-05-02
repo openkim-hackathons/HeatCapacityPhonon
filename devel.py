@@ -133,6 +133,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         atoms_new.set_positions(self._get_positions_from_lammps_dump("output/average_position.dump"))
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position.dump"))
         unit_cell = atoms_new.get_cell()
+        unit_cell = [unit_cell[i]/repeat[i] for i in range(3)]
 
         # Reduce and average
         prim_cell = self.reduce_and_avg(atoms_new, unit_cell,len(atoms_new), repeat)
