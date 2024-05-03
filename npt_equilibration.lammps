@@ -81,7 +81,8 @@ variable ysu atom "(c_up[2]-ylo)/(yhi-ylo) - (yz*(c_up[3]-zlo))/((yhi-ylo)*(zhi-
 variable zsu atom "(c_up[3]-zlo)/(zhi-zlo)"
 
 # Since Lammps can dump scaled unwrapped coordinates, one can test above variables by including the following two lines:
-dump test all custom 1000 output/test.dump.* id xsu ysu zsu v_xsu v_ysu v_zsu
+# dump test all custom 1000 output/test.dump.* id xsu ysu zsu v_xsu v_ysu v_zsu
+# dump_modify test first no
 
 # Average the scaled unwrapped positions.
 # Note that kim-convergence interrupts simulations after 1000 timesteps.

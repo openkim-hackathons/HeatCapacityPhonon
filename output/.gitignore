@@ -1,4 +1,5 @@
-average_position.dump
+average_position.dump.*
+average_position_over_files.out
 equilibrated.restart
 final_volume.dat
 lammps_equilibration.log
