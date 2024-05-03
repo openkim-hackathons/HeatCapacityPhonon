@@ -34,30 +34,33 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # Set averaging factor
         M = np.prod(repeat)
 
-        # The scaled positions will automatically wrap back the repeated atoms on top of the original 
-        # atoms in the primitive cell.
-        scaled_positions = atoms.get_scaled_positions()
+        # Wrap back the repeated atoms on top of the reference atoms in the original primitive cell.
+        positions = atoms.get_positions(wrap=True)
         
         number_atoms = len(atoms)
         original_number_atoms = number_atoms // M
         assert number_atoms == original_number_atoms * M
         positions_in_prim_cell = np.zeros((original_number_atoms, 3))
+
+        # Start from end of the atoms because we will remove all atoms except the reference ones.
         for i in reversed(range(number_atoms)):
             if i >= original_number_atoms:
                 # Get the distance to the reference atom in the original primitive cell with the 
                 # minimum image convention.
                 distance = atoms.get_distance(i % original_number_atoms, i,
                                               mic=True, vector=True)
-                scaled_distance = np.linalg.solve(cell, distance)
-                scaled_position_i = scaled_positions[i % original_number_atoms] + scaled_distance
+                # Get the position that has the closest distance to the reference atom in the 
+                # original primitive cell.
+                position_i = positions[i % original_number_atoms] + distance
                 # Remove atom from atoms object.
                 atoms.pop()
             else:
                 # Atom was part of the original primitive cell.
-                scaled_position_i = scaled_positions[i]
-            positions_in_prim_cell[i % original_number_atoms] += scaled_position_i / M
+                position_i = positions[i]
+            # Average.
+            positions_in_prim_cell[i % original_number_atoms] += position_i / M
 
-        atoms.set_scaled_positions(positions_in_prim_cell)
+        atoms.set_positions(positions_in_prim_cell)
         
     def _calculate(self, structure_index: int, temperature: float, pressure: float, timestep: float, 
                    number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3, 3, 3), 
