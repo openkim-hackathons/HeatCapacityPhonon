@@ -46,10 +46,9 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # Return primitive cell
         atoms.set_scaled_positions(prim_cell)
         
-
     def _calculate(self, structure_index: int, temperature: float, pressure: float, timestep: float, 
-                   number_control_timesteps: int, number_sampling_timesteps: int, 
-                   repeat: Tuple[int, int, int] = (3, 3, 3), seed: Optional[int] = None) -> None:
+                   number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3, 3, 3), 
+                   seed: Optional[int] = None) -> None:
         """
         structure_index:
             KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). 
@@ -80,7 +79,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # TODO: They changed the atoms object so this might actually be fixed.
         # Get species and masses of the atoms.
         atoms = self.atoms[structure_index]
-        natoms = len(atoms)
+        
         # TODO: Remove this hack at some point.
         species_of_each_atom = atoms.get_chemical_symbols()[:1]
         masses = atoms.get_masses()
@@ -89,8 +88,10 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         atoms_new = atoms.copy()
         
         # UNCOMMENT THIS TO TEST A TRICLINIC STRUCTURE!
-        #atoms_new = bulk('Ar', 'fcc', a=5.248)
+        # atoms_new = bulk('Ar', 'fcc', a=5.248)
   
+        atoms_new = atoms_new.repeat(repeat)
+
         # Write lammps file.
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
         structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
@@ -115,7 +116,6 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             "pressure": pressure,
             "pressure_damping": pdamp,
             "timestep": timestep,
-            "number_control_timesteps": number_control_timesteps,
             "number_sampling_timesteps": number_sampling_timesteps,
             "species": " ".join(species_of_each_atom) 
         }
@@ -308,11 +308,11 @@ if __name__ == "__main__":
     atoms = bulk("AlCo", "cesiumchloride", a=2.8663, cubic=True)
     model_name = "EAM_Dynamo_VailheFarkas_1997_CoAl__MO_284963179498_005"
 
-    atoms = bulk("Ar", "fcc", a=5.248)
+    atoms = bulk("Ar", "fcc", a=5.248, cubic=True)
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
 
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
 
     test = HeatCapacityPhonon(model_name=model_name, atoms=atoms)
-    test(temperature = 1.0, pressure = 1.0, timestep=0.001, number_control_timesteps=10, 
-         number_sampling_timesteps=10, repeat=(5, 5, 5))
+    test(temperature = 1.0, pressure = 1.0, timestep=0.001, number_sampling_timesteps=10, 
+         repeat=(5, 5, 5))
