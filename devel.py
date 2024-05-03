@@ -238,7 +238,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
     @staticmethod
     def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
         lines = sorted(np.loadtxt(filename, skiprows=9).tolist(), key = lambda x: x[0])     
-        return [(line[2], line[3], line[4]) for line in lines]
+        return [(line[1], line[2], line[3]) for line in lines]
 
     @staticmethod
     def _get_cell_from_lammps_dump(filename: str) -> npt.NDArray[float]:
