@@ -21,14 +21,12 @@ class HeatCapacityPhonon(CrystalGenomeTest):
 
         @return prim_cell : primitive cell
         '''
-
-        # Scale cell of bulk.
         cell = atoms.get_cell()
         
         # Divide each unit vector by its number of repeats.
         # See https://stackoverflow.com/questions/19602187/numpy-divide-each-row-by-a-vector-element.
         cell = cell / np.array(repeat)[:, None]
-        
+
         # Decrease size of cell in the atoms object.
         atoms.set_cell(cell)
         atoms.set_pbc((True, True, True))
@@ -46,9 +44,18 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         positions_in_prim_cell = np.zeros((original_number_atoms, 3))
         for i in reversed(range(number_atoms)):
             if i >= original_number_atoms:
+                # Get the distance to the reference atom in the original primitive cell with the 
+                # minimum image convention.
+                distance = atoms.get_distance(i % original_number_atoms, i,
+                                              mic=True, vector=True)
+                scaled_distance = np.linalg.solve(cell, distance)
+                scaled_position_i = scaled_positions[i % original_number_atoms] + scaled_distance
+                # Remove atom from atoms object.
                 atoms.pop()
-            for d in range(3):
-                positions_in_prim_cell[i % original_number_atoms][d] += scaled_positions[i][d] / M
+            else:
+                # Atom was part of the original primitive cell.
+                scaled_position_i = scaled_positions[i]
+            positions_in_prim_cell[i % original_number_atoms] += scaled_position_i / M
 
         atoms.set_scaled_positions(positions_in_prim_cell)
         
@@ -140,15 +147,15 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         subprocess.run("python compute_average_positions.py", check=True, shell=True)
 
         # Check symmetry - post-NPT
-        atoms_new.set_positions(self._get_positions_from_lammps_dump("output/average_position_over_files.out"))
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_over_files.out"))
+        atoms_new.set_scaled_positions(self._get_positions_from_lammps_dump("output/average_position_over_files.out"))
 
         # Reduce and average
         self.reduce_and_avg(atoms_new, repeat)
 
         # ASE Symmetry check
         comp = sc.SymmetryEquivalenceCheck()
-        comp.compare(atoms, atoms_new)
+        print(comp.compare(atoms, atoms_new))
 
         # AFLOW Symmetry check
         self._update_aflow_designation_from_atoms(structure_index, atoms_new)
