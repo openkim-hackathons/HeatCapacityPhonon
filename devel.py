@@ -33,22 +33,25 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         atoms.set_cell(cell)
         atoms.set_pbc((True, True, True))
 
-        positions_in_prim_cell = np.zeros((len(atoms), 3))
-
         # Set averaging factor
         M = np.prod(repeat)
 
         # The scaled positions will automatically wrap back the repeated atoms on top of the original 
         # atoms in the primitive cell.
         scaled_positions = atoms.get_scaled_positions()
-
+        
         number_atoms = len(atoms)
-        for i in range(number_atoms):
+        original_number_atoms = number_atoms // M
+        assert number_atoms == original_number_atoms * M
+        positions_in_prim_cell = np.zeros((original_number_atoms, 3))
+        for i in reversed(range(number_atoms)):
+            if i >= original_number_atoms:
+                atoms.pop()
             for d in range(3):
-                positions_in_prim_cell[i % number_atoms][d] += scaled_positions[i][d] / M
+                positions_in_prim_cell[i % original_number_atoms][d] += scaled_positions[i][d] / M
 
         atoms.set_scaled_positions(positions_in_prim_cell)
-
+        
     def _calculate(self, structure_index: int, temperature: float, pressure: float, timestep: float, 
                    number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3, 3, 3), 
                    seed: Optional[int] = None) -> None:
