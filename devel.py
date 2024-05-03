@@ -1,15 +1,14 @@
 import os
 import random
 import subprocess
-from typing import Iterable, List, Optional, Tuple, Sequence
-import uuid
+from typing import Iterable, List, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 from ase import Atoms
 from ase.build import bulk
-from ase.cell import Cell
 from ase.utils import structure_comparator as sc
-from kim_python_utils.ase import CrystalGenomeTest, KIMASEError
+from kim_python_utils.ase import CrystalGenomeTest
+
 
 class HeatCapacityPhonon(CrystalGenomeTest):
     def reduce_and_avg(self, atoms, repeat):
