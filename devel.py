@@ -104,7 +104,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         
         # UNCOMMENT THIS TO TEST A TRICLINIC STRUCTURE!
         # atoms_new = bulk('Ar', 'fcc', a=5.248)
-  
+        
         atoms_new = atoms_new.repeat(repeat)
 
         # Write lammps file.
@@ -112,7 +112,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
         atoms_new.write(structure_file, format="lammps-data")
         self._add_masses_to_structure_file(structure_file, masses)
-        
+
         # LAMMPS for heat capacity
         if seed is None:
             # Get random 31-bit unsigned integer.
@@ -152,12 +152,10 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_over_files.out"))
         atoms_new.set_scaled_positions(self._get_positions_from_lammps_dump("output/average_position_over_files.out"))
 
+        print(atoms_new.get_cell()[:])
+
         # Reduce and average
         self.reduce_and_avg(atoms_new, repeat)
-
-        # ASE Symmetry check
-        comp = sc.SymmetryEquivalenceCheck()
-        print(comp.compare(atoms, atoms_new))
 
         # AFLOW Symmetry check
         self._update_aflow_designation_from_atoms(structure_index, atoms_new)
@@ -258,13 +256,13 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         new_cell = np.loadtxt(filename, skiprows=5, max_rows=3)
         assert new_cell.shape == (3, 2) or new_cell.shape == (3, 3)
 
-        # Save cell parameters
-        xlo = new_cell[0,0]
-        xhi = new_cell[0,1]
-        ylo = new_cell[1,0]
-        yhi = new_cell[1,1]
-        zlo = new_cell[2,0]
-        zhi = new_cell[2,1]
+        # See https://docs.lammps.org/Howto_triclinic.html.
+        xlo_bound = new_cell[0,0]
+        xhi_bound = new_cell[0,1]
+        ylo_bound = new_cell[1,0]
+        yhi_bound = new_cell[1,1]
+        zlo_bound = new_cell[2,0]
+        zhi_bound = new_cell[2,1]
 
         # If not cubic add more cell params
         if new_cell.shape[-1] != 2:
@@ -275,8 +273,14 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             xy = 0.0
             xz = 0.0
             yz = 0.0
-
-        # See https://docs.lammps.org/Howto_triclinic.html.
+        
+        xlo = xlo_bound - min(0.0, xy, xz, xy + xz)
+        xhi = xhi_bound - max(0.0, xy, xz, xy + xz)
+        ylo = ylo_bound - min(0.0, yz)
+        yhi = yhi_bound - max(0.0, yz)
+        zlo = zlo_bound
+        zhi = zhi_bound
+        
         cell = np.empty(shape=(3, 3))
         cell[0, :] = np.array([xhi - xlo, 0.0, 0.0])
         cell[1, :] = np.array([xy, yhi - ylo, 0.0])
