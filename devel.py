@@ -42,9 +42,10 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # atoms in the primitive cell.
         scaled_positions = atoms.get_scaled_positions()
 
-        for i in range(len(atoms)):
+        number_atoms = len(atoms)
+        for i in range(number_atoms):
             for d in range(3):
-                positions_in_prim_cell[i % n][d] += scaled_positions[i][d] / M
+                positions_in_prim_cell[i % number_atoms][d] += scaled_positions[i][d] / M
 
         atoms.set_scaled_positions(positions_in_prim_cell)
 
