@@ -12,40 +12,42 @@ from ase.utils import structure_comparator as sc
 from kim_python_utils.ase import CrystalGenomeTest, KIMASEError
 
 class HeatCapacityPhonon(CrystalGenomeTest):
-    def reduce_and_avg(self, atoms, n, repeat):
+    def reduce_and_avg(self, atoms, repeat):
         '''
         Function to reduce all atoms to unit cell position and return averaged unit cell
 
         @param atoms : repeated atoms object
-        @param unit_cell : unit cell of interest
-        @param n : number of atoms
         @param repeat : repeat tuple
 
         @return prim_cell : primitive cell
         '''
 
-        # Scale bulk
-        unit_cell = atoms.get_cell()
-        unit_cell = [unit_cell[i]/repeat[i] for i in range(repeat)]
+        # Scale cell of bulk.
+        cell = atoms.get_cell()
+        
+        # Divide each unit vector by its number of repeats.
+        # See https://stackoverflow.com/questions/19602187/numpy-divide-each-row-by-a-vector-element.
+        cell = cell / np.array(repeat)[:, None]
+        
+        # Decrease size of cell in the atoms object.
+        atoms.set_cell(cell)
         atoms.set_pbc((True, True, True))
 
-        # Instantiate primitive cell
-        prim_cell = np.zeros((n, 3))
+        positions_in_prim_cell = np.zeros((len(atoms), 3))
 
         # Set averaging factor
         M = np.prod(repeat)
 
+        # The scaled positions will automatically wrap back the repeated atoms on top of the original 
+        # atoms in the primitive cell.
         scaled_positions = atoms.get_scaled_positions()
 
-        # Iterate over all atoms and sum
         for i in range(len(atoms)):
             for d in range(3):
-                # Add to prim_cell
-                prim_cell[i % n][d] += scaled_positions[i][d] / M
+                positions_in_prim_cell[i % n][d] += scaled_positions[i][d] / M
 
-        # Return primitive cell
-        atoms.set_scaled_positions(prim_cell)
-        
+        atoms.set_scaled_positions(positions_in_prim_cell)
+
     def _calculate(self, structure_index: int, temperature: float, pressure: float, timestep: float, 
                    number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3, 3, 3), 
                    seed: Optional[int] = None) -> None:
@@ -125,12 +127,9 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_equilibration.lammps")
         
-        # TODO: INCREASE kim-convergence runs so that we don't get these weird oscillations in volume?
         subprocess.run(command, check=True, shell=True)
         self._extract_and_plot() 
         
-        # TODO: Philipp prevents that this file is even created.
-        os.remove("output/average_position.dump.0")
         # TODO: Guanming changes this into a function call.
         subprocess.run("python compute_average_positions.py", check=True, shell=True)
 
@@ -139,7 +138,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_positions_over_files.out"))
 
         # Reduce and average
-        self.reduce_and_avg(atoms_new, unit_cell,len(atoms_new), repeat)
+        self.reduce_and_avg(atoms_new, repeat)
 
         # ASE Symmetry check
         comp = sc.SymmetryEquivalenceCheck()
