@@ -28,7 +28,7 @@ def get_table(in_file):
     header_flags  = ["Step", "v_pe_metal", "v_temp_metal", "v_press_metal"]
     eot_flags  = ["Loop", "time", "on", "procs", "for", "steps"]
     table = []
-    with open(in_file,"r") as f:
+    with open(in_file, "r") as f:
         line = f.readline()
         while line: # not EOF
             is_header = True
@@ -68,12 +68,9 @@ if __name__ == "__main__":
         out_file_name = sys.argv[2]
         property_name = sys.argv[3]
 
-    if os.path.isfile(out_file_name):
-        df = np.loadtxt(out_file_name, skiprows=1)
-    else:
-        table = get_table(in_file_name)
-        write_table(out_file_name)
-        df = np.loadtxt(out_file_name, skiprows=1)
+    table = get_table(in_file_name)
+    write_table(out_file_name)
+    df = np.loadtxt(out_file_name, skiprows=1)
     
     with open(out_file_name) as file:
         first_line = file.readline().strip("\n")
