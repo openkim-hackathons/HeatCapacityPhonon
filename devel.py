@@ -13,12 +13,10 @@ from kim_python_utils.ase import CrystalGenomeTest
 class HeatCapacityPhonon(CrystalGenomeTest):
     def reduce_and_avg(self, atoms, repeat):
         '''
-        Function to reduce all atoms to unit cell position and return averaged unit cell
+        Function to reduce all atoms to the original unit cell position.
 
         @param atoms : repeated atoms object
         @param repeat : repeat tuple
-
-        @return prim_cell : primitive cell
         '''
         cell = atoms.get_cell()
         
@@ -33,7 +31,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # Set averaging factor
         M = np.prod(repeat)
 
-        # Wrap back the repeated atoms on top of the reference atoms in the original primitive cell.
+        # Wrap back the repeated atoms on top of the reference atoms in the original unit cell.
         positions = atoms.get_positions(wrap=True)
         
         number_atoms = len(atoms)
@@ -44,17 +42,17 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # Start from end of the atoms because we will remove all atoms except the reference ones.
         for i in reversed(range(number_atoms)):
             if i >= original_number_atoms:
-                # Get the distance to the reference atom in the original primitive cell with the 
+                # Get the distance to the reference atom in the original unit cell with the 
                 # minimum image convention.
                 distance = atoms.get_distance(i % original_number_atoms, i,
                                               mic=True, vector=True)
                 # Get the position that has the closest distance to the reference atom in the 
-                # original primitive cell.
+                # original unit cell.
                 position_i = positions[i % original_number_atoms] + distance
                 # Remove atom from atoms object.
                 atoms.pop()
             else:
-                # Atom was part of the original primitive cell.
+                # Atom was part of the original unit cell.
                 position_i = positions[i]
             # Average.
             positions_in_prim_cell[i % original_number_atoms] += position_i / M
@@ -139,7 +137,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             "lammps " 
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_equilibration.lammps")
-        
+        # TODO: Play around with number of independent samples in kim-convergence.
         subprocess.run(command, check=True, shell=True)
         self._extract_and_plot() 
         
@@ -151,8 +149,6 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         # Check symmetry - post-NPT
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_over_files.out"))
         atoms_new.set_scaled_positions(self._get_positions_from_lammps_dump("output/average_position_over_files.out"))
-
-        print(atoms_new.get_cell()[:])
 
         # Reduce and average
         self.reduce_and_avg(atoms_new, repeat)
@@ -332,5 +328,5 @@ if __name__ == "__main__":
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
 
     test = HeatCapacityPhonon(model_name=model_name, atoms=atoms)
-    test(temperature = 1.0, pressure = 1.0, timestep=0.001, number_sampling_timesteps=10, 
-         repeat=(5, 5, 5))
+    test(temperature = 50.0, pressure = 1.0, timestep=0.001, number_sampling_timesteps=10, 
+         repeat=(10, 10, 10))
