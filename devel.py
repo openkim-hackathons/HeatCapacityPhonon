@@ -131,7 +131,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         self._extract_and_plot() 
         
         # TODO: Philipp prevents that this is even happening.
-        os.remove("average_position.dump.0")
+        os.remove("output/average_position.dump.0")
         # TODO: Guanming changes this into a function call.
         subprocess.run("python compute_average_positions.py", check=True, shell=True)
 
