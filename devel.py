@@ -87,11 +87,9 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         
         # Copy original atoms so that their information does not get lost when the new atoms are modified.
         atoms_new = atoms.copy()
-        print(natoms)
         
         # UNCOMMENT THIS TO TEST A TRICLINIC STRUCTURE!
         #atoms_new = bulk('Ar', 'fcc', a=5.248)
-        unit_cell = atoms_new.get_cell()
   
         # Write lammps file.
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
