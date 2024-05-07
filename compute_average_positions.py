@@ -64,7 +64,7 @@ if __name__ == "__main__":
     pos_list = []
     max_step,last_step_file = -1, ""
     for file_name in os.listdir(data_dir):
-        if ("average_position" in file_name) and ("dump" in file_name):
+        if ("average_position_equilibration" in file_name) and ("dump" in file_name):
             file_path = os.path.join(data_dir,file_name)
             id_pos_dict = get_id_pos_dict(file_path)
             id_pos = sorted(id_pos_dict.items())
