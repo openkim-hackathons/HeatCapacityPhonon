@@ -83,7 +83,7 @@ variable zsu atom "(c_up[3]-zlo)/(zhi-zlo)"
 # Note that kim-convergence interrupts simulations after 1000 timesteps.
 # We write out the average scaled unwrapped positions after every 1000 timesteps.
 fix avePos all ave/atom 1 1000 1000 v_xsu v_ysu v_zsu
-dump avePosDump all custom 1000 output/average_position_equilibration.dump.* id f_avePos[1] f_avePos[2] f_avePos[3]
+dump avePosDump all custom 1000 ${average_position_filename} id f_avePos[1] f_avePos[2] f_avePos[3]
 
 # Prevent dump at timestep 0.
 dump_modify avePosDump delay 1000
@@ -113,4 +113,4 @@ undump avePosDump
 reset_timestep 0
 
 # Write the initial starting file for a true simulation.
-write_restart output/final_configuration_equilibration.restart
+write_restart ${restart_filename}

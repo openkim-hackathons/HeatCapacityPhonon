@@ -65,7 +65,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         pdamp = timestep * 100.0
         tdamp = timestep * 1000.0
 
-        # Run NPT simulation.
+        # Run NPT simulation for equilibration.
         variables = {
             "modelname": self.kim_model_name,
             "temperature": temperature,
@@ -75,7 +75,9 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "pressure_damping": pdamp,
             "timestep": timestep,
             "number_sampling_timesteps": number_sampling_timesteps,
-            "species": " ".join(species) 
+            "species": " ".join(species),
+            "average_position_filename": "output/average_position_equilibration.dump.*",
+            "restart_filename": "output/final_configuration_equilibration.restart" 
         }
         # TODO: Possibly run MPI version of Lammps if available.
         command = (
