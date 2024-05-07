@@ -62,25 +62,25 @@ if __name__ == "__main__":
         # plot the volume using lammps_equilibration.log if there is no explicit inputs
         in_file_name = "./output/lammps_equilibration.log"
         out_file_name = "./output/lammps_equilibration.csv"
-        property_name = "v_vol_metal"
+        property_names = ["v_vol_metal", "v_temp_metal"]
     else:
         in_file_name = sys.argv[1]
         out_file_name = sys.argv[2]
-        property_name = sys.argv[3]
+        property_names = [sys.argv[i] for i in range(3, len(sys.argv))]
 
     table = get_table(in_file_name)
     write_table(out_file_name)
     df = np.loadtxt(out_file_name, skiprows=1)
     
-    with open(out_file_name) as file:
-        first_line = file.readline().strip("\n")
-    property_index = first_line.split().index(property_name)
-
-    properties = df[:, property_index]
-    step = df[:, 0]
-    plt.plot(step, properties)
-    plt.xlabel("step")
-    plt.ylabel(property_name)
-    img_file =  "output/" + property_name +".png"
-    plt.savefig(img_file, bbox_inches="tight")
-    plt.close()
+    for property_name in property_names:
+        with open(out_file_name) as file:
+            first_line = file.readline().strip("\n")
+        property_index = first_line.split().index(property_name)
+        properties = df[:, property_index]
+        step = df[:, 0]
+        plt.plot(step, properties)
+        plt.xlabel("step")
+        plt.ylabel(property_name)
+        img_file =  "output/" + property_name +".png"
+        plt.savefig(img_file, bbox_inches="tight")
+        plt.close()
