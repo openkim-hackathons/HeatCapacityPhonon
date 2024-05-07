@@ -1,5 +1,5 @@
 # Set up logging.
-log output/lammps_equilibration.log
+log ${log_filename}
 
 # Set the OpenKIM model and units that will be used.
 kim init ${modelname} metal unit_conversion_mode
@@ -97,10 +97,10 @@ run 0
 velocity all scale $(v_temperature*v__u_temperature)
 
 # Set up convergence check with kim-convergence.
-python run_length_control input 6 SELF 1 variable vol_metal variable temp_metal format pissss file run_length_control.py
+python run_length_control_equilibration input 6 SELF 1 variable vol_metal variable temp_metal format pissss file run_length_control_equilibration.py
 
 # Run until converged.
-python run_length_control invoke
+python run_length_control_equilibration invoke
 
 # Print the final volume.
 print ${vol_metal} screen no file output/final_volume_equilibration.dat
@@ -113,4 +113,4 @@ undump avePosDump
 reset_timestep 0
 
 # Write the initial starting file for a true simulation.
-write_restart ${restart_filename}
+write_restart ${write_restart_filename}

@@ -76,8 +76,9 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "timestep": timestep,
             "number_sampling_timesteps": number_sampling_timesteps,
             "species": " ".join(species),
+            "log_filename": "output/lammps_equilibration.log",
             "average_position_filename": "output/average_position_equilibration.dump.*",
-            "restart_filename": "output/final_configuration_equilibration.restart" 
+            "write_restart_filename": "output/final_configuration_equilibration.restart" 
         }
         # TODO: Possibly run MPI version of Lammps if available.
         command = (
