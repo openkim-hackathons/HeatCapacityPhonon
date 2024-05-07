@@ -95,7 +95,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         atoms_new.set_scaled_positions(self._get_positions_from_lammps_dump("output/average_position_over_files.out"))
 
         # Reduce and average
-        self.reduce_and_avg(atoms_new, repeat)
+        self._reduce_and_avg(atoms_new, repeat)
 
         # AFLOW Symmetry check
         self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
@@ -170,7 +170,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         """
 
     @staticmethod
-    def reduce_and_avg(atoms, repeat):
+    def _reduce_and_avg(atoms, repeat):
         '''
         Function to reduce all atoms to the original unit cell position.
 
