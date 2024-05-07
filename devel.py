@@ -139,7 +139,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
             + " -in npt_equilibration.lammps")
         # TODO: Play around with number of independent samples in kim-convergence.
         subprocess.run(command, check=True, shell=True)
-        self._extract_and_plot() 
+        self._extract_and_plot(("v_vol_metal", "v_temp_metal"))
         
         # TODO: Guanming changes this into a function call and also removes the average_position.dump.* files.
         subprocess.run("python compute_average_positions.py", check=True, shell=True)
@@ -235,10 +235,10 @@ class HeatCapacityPhonon(CrystalGenomeTest):
                 break
     
     @staticmethod
-    def _extract_and_plot(property_name: str = "v_vol_metal") -> None:
+    def _extract_and_plot(property_names: Iterable[str]) -> None:
         # extract data and save it as png file
         subprocess.run(f"python extract_table.py output/lammps_equilibration.log "
-                       f"output/lammps_equilibration.csv {property_name}", check=True, shell=True)
+                       f"output/lammps_equilibration.csv {' '.join(property_names)}", check=True, shell=True)
 
     @staticmethod
     def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:

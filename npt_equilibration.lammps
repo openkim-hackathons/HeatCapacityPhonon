@@ -97,7 +97,7 @@ run 0
 velocity all scale $(v_temperature*v__u_temperature)
 
 # Set up convergence check with kim-convergence.
-python run_length_control input 4 SELF 1 variable vol_metal format piss file run_length_control.py
+python run_length_control input 6 SELF 1 variable vol_metal variable temp_metal format pissss file run_length_control.py
 
 # Run until converged.
 python run_length_control invoke
