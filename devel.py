@@ -169,7 +169,8 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         ####################################################
         """
 
-    def reduce_and_avg(self, atoms, repeat):
+    @staticmethod
+    def reduce_and_avg(atoms, repeat):
         '''
         Function to reduce all atoms to the original unit cell position.
 
@@ -266,7 +267,6 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
 
     @staticmethod
     def _set_atoms_from_lmp_file(atoms: Atoms, lmp_file: str) -> None:
-        # HACKY!
         pos = np.loadtxt(lmp_file, skiprows=12, max_rows=len(atoms))
         atoms.set_positions([pos[i, 2:] for i in range(len(atoms))])
         with open(lmp_file, "r") as file:
@@ -300,14 +300,8 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
 
 
 if __name__ == "__main__":
-    atoms = bulk("AlCo", "cesiumchloride", a=2.8663, cubic=True)
-    model_name = "EAM_Dynamo_VailheFarkas_1997_CoAl__MO_284963179498_005"
-
-    atoms = bulk("Ar", "fcc", a=5.248)
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
-
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
-
     test_driver = HeatCapacityPhonon(model_name)
-    test_driver(atoms, temperature = 50.0, pressure = 1.0, timestep=0.001, number_sampling_timesteps=10, 
-                repeat=(2, 2, 2), loose_triclinic_and_monoclinic=False)
+    test_driver(bulk("Ar", "fcc", a=5.248), temperature = 10.0, pressure = 1.0, timestep=0.001, 
+                number_sampling_timesteps=10, repeat=(10, 10, 10), loose_triclinic_and_monoclinic=False)
