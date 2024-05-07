@@ -265,39 +265,6 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         cell[2, :] = np.array([xz, yz, zhi - zlo])
         return cell
 
-    @staticmethod
-    def _set_atoms_from_lmp_file(atoms: Atoms, lmp_file: str) -> None:
-        pos = np.loadtxt(lmp_file, skiprows=12, max_rows=len(atoms))
-        atoms.set_positions([pos[i, 2:] for i in range(len(atoms))])
-        with open(lmp_file, "r") as file:
-            for index, line in enumerate(file):
-                if index == 4:
-                    ls = line.split()
-                    assert len(ls) == 4
-                    xlo = float(ls[0])
-                    xhi = float(ls[1])
-                elif index == 5:
-                    ls = line.split()
-                    assert len(ls) == 4
-                    ylo = float(ls[0])
-                    yhi = float(ls[1])
-                elif index == 6:
-                    ls = line.split()
-                    assert len(ls) == 4
-                    zlo = float(ls[0])
-                    zhi = float(ls[1])
-                elif index == 7:
-                    ls = line.split()
-                    assert len(ls) == 6
-                    xy = float(ls[0])
-                    xz = float(ls[1])
-                    yz = float(ls[2])
-        cell = np.empty(shape=(3, 3))
-        cell[0, :] = np.array([xhi - xlo, 0.0, 0.0])
-        cell[1, :] = np.array([xy, yhi - ylo, 0.0])
-        cell[2, :] = np.array([xz, yz, zhi - zlo])
-        atoms.set_cell(cell)
-
 
 if __name__ == "__main__":
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
