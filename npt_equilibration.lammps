@@ -13,15 +13,16 @@ neigh_modify delay 0 every 1 check yes one 2000
 # Read initial zero-temperature crystal.
 read_data output/zero_temperature_crystal.lmp
 
-# TODO: The following does not work for orthogonal boxes.
+# Change to triclinic box.
+change_box all triclinic
 
 # Convert box and all atomic positions to the correct units.
 change_box all x scale ${_u_distance} &
                y scale ${_u_distance} &
                z scale ${_u_distance} &
-               #xy final $(xy*v__u_distance) &
-               #xz final $(xz*v__u_distance) &
-               #yz final $(yz*v__u_distance) &
+               xy final $(xy*v__u_distance) &
+               xz final $(xz*v__u_distance) &
+               yz final $(yz*v__u_distance) &
                remap
 
 # Interatomic potential and neighbor settings
@@ -36,9 +37,8 @@ run 0
 velocity all scale $(v_temperature*v__u_temperature)
 
 # Equilibrate in NPT ensemble.
-# Todo: Don't we really want tri instead of iso?
 fix NPT all npt temp $(v_temperature*v__u_temperature) $(v_temperature*v__u_temperature) $(v_temperature_damping*v__u_time) &
-                iso $(v_pressure*v__u_pressure) $(v_pressure*v__u_pressure) $(v_pressure_damping*v__u_time)
+                tri $(v_pressure*v__u_pressure) $(v_pressure*v__u_pressure) $(v_pressure_damping*v__u_time)
 
 # Define variables in proper units.
 variable pe_metal equal "c_thermo_pe/v__u_energy"
