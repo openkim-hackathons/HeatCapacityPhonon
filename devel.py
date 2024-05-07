@@ -141,9 +141,7 @@ class HeatCapacityPhonon(CrystalGenomeTest):
         subprocess.run(command, check=True, shell=True)
         self._extract_and_plot() 
         
-        # TODO: Philipp prevents that this is even happening.
-        os.remove("output/average_position.dump.0")
-        # TODO: Guanming changes this into a function call.
+        # TODO: Guanming changes this into a function call and also removes the average_position.dump.* files.
         subprocess.run("python compute_average_positions.py", check=True, shell=True)
 
         # Check symmetry - post-NPT
