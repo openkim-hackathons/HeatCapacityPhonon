@@ -96,6 +96,11 @@ dump_modify avePosDump delay 1000
 # Set timestep.
 timestep $(v_timestep*v__u_time)
 
+# Temperature may be off because of rigid bodies or SHAKE constraints.
+# See https://docs.lammps.org/velocity.html
+run 0
+velocity all scale $(v_temperature*v__u_temperature)
+
 # Set up convergence check with kim-convergence.
 python run_length_control input 4 SELF 1 variable vol_metal format piss file run_length_control.py
 
