@@ -35,6 +35,9 @@ velocity all create $(v_temperature*v__u_temperature) ${temperature_seed}
 fix NPT all npt temp $(v_temperature*v__u_temperature) $(v_temperature*v__u_temperature) $(v_temperature_damping*v__u_time) &
                 tri $(v_pressure*v__u_pressure) $(v_pressure*v__u_pressure) $(v_pressure_damping*v__u_time)
 
+# Set timestep.
+timestep $(v_timestep*v__u_time)
+
 # Define variables in proper units.
 variable pe_metal equal "c_thermo_pe/v__u_energy"
 variable ke_metal equal ke/${_u_energy}
@@ -92,9 +95,6 @@ dump avePosDump all custom 1000 ${average_position_filename} id f_avePos[1] f_av
 
 # Prevent dump at timestep 0.
 dump_modify avePosDump delay 1000
-
-# Set timestep.
-timestep $(v_timestep*v__u_time)
 
 # Temperature may be off because of rigid bodies or SHAKE constraints.
 # See https://docs.lammps.org/velocity.html
