@@ -83,6 +83,7 @@ compute up all property/atom xu yu zu
 #     (   0       0      zhi-zlo)
 # This matrix can be inverted to yield the equations that are implemented below to obtain the scaled 
 # unwrapped positions from the unwrapped positions.
+# Note that for the scaled coordinates no unit conversion is necessary.
 variable xsu atom "(c_up[1]-xlo)/(xhi-xlo) - (xy*(c_up[2]-ylo))/((xhi-xlo)*(yhi-ylo)) + ((xy*yz-(yhi-ylo)*xz)*(c_up[3]-zlo))/((xhi-xlo)*(yhi-ylo)*(zhi-zlo))"
 variable ysu atom "(c_up[2]-ylo)/(yhi-ylo) - (yz*(c_up[3]-zlo))/((yhi-ylo)*(zhi-zlo))"
 variable zsu atom "(c_up[3]-zlo)/(zhi-zlo)"
