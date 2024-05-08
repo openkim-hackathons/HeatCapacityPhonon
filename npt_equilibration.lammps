@@ -37,6 +37,7 @@ fix NPT all npt temp $(v_temperature*v__u_temperature) $(v_temperature*v__u_temp
 
 # Define variables in proper units.
 variable pe_metal equal "c_thermo_pe/v__u_energy"
+variable ke_metal equal ke/${_u_energy}
 variable temp_metal equal "c_thermo_temp/v__u_temperature"
 variable press_metal equal "c_thermo_press/v__u_pressure"
 variable vol_metal equal vol/${_u_distance}/${_u_distance}/${_u_distance}
@@ -49,11 +50,15 @@ variable zhi_metal equal zhi/${_u_distance}
 variable xy_metal equal xy/${_u_distance}
 variable xz_metal equal xz/${_u_distance}
 variable yz_metal equal yz/${_u_distance}
+variable enthalpy_metal equal enthalpy/${_u_energy}
+
+# Required to initialize ke and enthalpy.
+run 0
 
 # Set up logging of thermodynamic information.
-thermo_style custom step v_pe_metal v_temp_metal v_press_metal v_vol_metal &
+thermo_style custom step v_pe_metal v_ke_metal v_temp_metal v_press_metal v_vol_metal &
                          v_xlo_metal v_xhi_metal v_ylo_metal v_yhi_metal v_zlo_metal v_zhi_metal &
-                         v_xy_metal v_xz_metal v_yz_metal
+                         v_xy_metal v_xz_metal v_yz_metal v_enthalpy_metal
 thermo ${number_sampling_timesteps}
 
 # Store unwrapped coordinates for every atom. 
