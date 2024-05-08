@@ -89,17 +89,17 @@ variable ysu atom "(c_up[2]-ylo)/(yhi-ylo) - (yz*(c_up[3]-zlo))/((yhi-ylo)*(zhi-
 variable zsu atom "(c_up[3]-zlo)/(zhi-zlo)"
 
 # Since Lammps can dump scaled unwrapped coordinates, one can test above variables by including the following two lines:
-# dump test all custom 1000 output/test.dump.* id xsu ysu zsu v_xsu v_ysu v_zsu
-# dump_modify test delay 1000
+# dump test all custom 10000 output/test.dump.* id xsu ysu zsu v_xsu v_ysu v_zsu
+# dump_modify test delay 10000
 
 # Average the scaled unwrapped positions.
-# Note that kim-convergence interrupts simulations after 1000 timesteps.
-# We write out the average scaled unwrapped positions after every 1000 timesteps.
-fix avePos all ave/atom 1 1000 1000 v_xsu v_ysu v_zsu
-dump avePosDump all custom 1000 ${average_position_filename} id f_avePos[1] f_avePos[2] f_avePos[3]
+# Note that kim-convergence interrupts simulations after 10000 timesteps.
+# We write out the average scaled unwrapped positions after every 10000 timesteps.
+fix avePos all ave/atom 1 10000 10000 v_xsu v_ysu v_zsu
+dump avePosDump all custom 10000 ${average_position_filename} id f_avePos[1] f_avePos[2] f_avePos[3]
 
 # Prevent dump at timestep 0.
-dump_modify avePosDump delay 1000
+dump_modify avePosDump delay 10000
 
 # Temperature may be off because of rigid bodies or SHAKE constraints.
 # See https://docs.lammps.org/velocity.html
