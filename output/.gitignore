@@ -1,7 +1,7 @@
-average_position.dump.*
+average_position_equilibration.dump.*
 average_position_over_files.out
-equilibrated.restart
-final_volume.dat
+final_configuration_equilibration.restart
+final_volume_equilibration.dat
 lammps_equilibration.log
 zero_temperature_crystal.lmp
 *.png
