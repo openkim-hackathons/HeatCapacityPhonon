@@ -10,10 +10,13 @@ from kim_test_utils.test_driver import CrystalGenomeTestDriver
 
 
 class HeatCapacityPhonon(CrystalGenomeTestDriver):
-    def _calculate(self, temperature: float, pressure: float, timestep: float, 
-                   number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3, 3, 3), 
+    def _calculate(self, temperature: float, pressure: float, temperature_offset_fraction: float,
+                   timestep: float, number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3, 3, 3), 
                    seed: Optional[int] = None, loose_triclinic_and_monoclinic=False, **kwargs) -> None:
         """
+        Compute constant-pressure heat capacity from centered finite difference (see Section 3.2 in
+        https://pubs.acs.org/doi/10.1021/jp909762j).
+
         structure_index:
             KIM tests can loop over multiple structures (i.e. crystals, molecules, etc.). 
             This indicates which is being used for the current calculation.
@@ -66,6 +69,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         tdamp = timestep * 1000.0
 
         # Run NPT simulation for equilibration.
+        # TODO: If we notice that this takes too long, maybe use an initial temperature ramp.
         variables = {
             "modelname": self.kim_model_name,
             "temperature": temperature,
@@ -81,6 +85,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "write_restart_filename": "output/final_configuration_equilibration.restart" 
         }
         # TODO: Possibly run MPI version of Lammps if available.
+        # TODO: Maybe use initial temperature ramp.
         command = (
             "lammps " 
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
@@ -88,9 +93,9 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         subprocess.run(command, check=True, shell=True)
 
         # TODO: Remove subprocess call in this function.
-        self._extract_and_plot(("v_vol_metal", "v_temp_metal"))
+        self._extract_and_plot("output/lammps_equilibration.log", ("v_vol_metal", "v_temp_metal"))
         
-        # TODO: Guanming changes this into a function call and also removes the average_position.dump.* files.
+        # TODO: Guanming changes this into a function call and also removes the average_position_equilibration.dump.* files.
         subprocess.run("python compute_average_positions.py", check=True, shell=True)
 
         # Check symmetry - post-NPT
@@ -98,30 +103,71 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         atoms_new.set_scaled_positions(self._get_positions_from_lammps_dump("output/average_position_over_files.out"))
 
         # Reduce and average
-        self._reduce_and_avg(atoms_new, repeat)
+        reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
 
         # AFLOW Symmetry check
         self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
-            atoms_new, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
+            reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
         
+        # Run first NPT simulation at higher temperature.
+        variables = {
+            "modelname": self.kim_model_name,
+            "temperature": (1 + temperature_offset_fraction) * temperature,
+            "temperature_damping": tdamp,
+            "pressure": pressure,
+            "pressure_damping": pdamp,
+            "timestep": timestep,
+            "number_sampling_timesteps": number_sampling_timesteps,
+            "species": " ".join(species),
+            "log_filename": "output/lammps_high_temperature.log",
+            "average_position_filename": "output/average_position_high_temperature.dump.*",
+            "read_restart_filename": "output/final_configuration_equilibration.restart" 
+        }
+        # TODO: Possibly run MPI version of Lammps if available.
+        command = (
+            "lammps " 
+            + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
+            + " -in npt_heat_capacity.lammps")
+        subprocess.run(command, check=True, shell=True)
+
+        # TODO: Once extract_and_plot is a function call, allow to change the output file names.
+        self._extract_and_plot("output/lammps_high_temperature.log", ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
+
+        # TODO: Once Guanming changed compute_average_positions.py into a function call, use this function on the 
+        # output/average_position_high_temperature.dump.* files to obtain an averaged position in this run and to check if
+        # the symmetry is unbroken.
+
+        # Run second NPT simulation at lower temperature.
+        variables = {
+            "modelname": self.kim_model_name,
+            "temperature": (1 - temperature_offset_fraction) * temperature,
+            "temperature_damping": tdamp,
+            "pressure": pressure,
+            "pressure_damping": pdamp,
+            "timestep": timestep,
+            "number_sampling_timesteps": number_sampling_timesteps,
+            "species": " ".join(species),
+            "log_filename": "output/lammps_low_temperature.log",
+            "average_position_filename": "output/average_position_low_temperature.dump.*",
+            "read_restart_filename": "output/final_configuration_equilibration.restart" 
+        }
+        # TODO: Possibly run MPI version of Lammps if available.
+        command = (
+            "lammps " 
+            + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
+            + " -in npt_heat_capacity.lammps")
+        subprocess.run(command, check=True, shell=True)
+
+        # TODO: Once extract_and_plot is a function call, allow to change the output file names.
+        self._extract_and_plot("output/lammps_low_temperature.log", ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
+
+        # TODO: Once Guanming changed compute_average_positions.py into a function call, use this function on the 
+        # output/average_position_high_temperature.dump.* files to obtain an averaged position in this run and to check if
+        # the symmetry is unbroken.
+
+        # TODO: Compute heat capacity from reported enthalpy average in the previous simulations and store it into a property.
+
         """
-        # NVT simulation
-        vol = np.loadtxt('volume.dat')
-
-        lmp_nvt = 'modelname ${model_name} temperature ${temperature} temperature_seed ${seed} temperature_damping ${tdamp} volume ${vol} timestep ${timestep} number_control_timesteps ${number_control_timesteps}'
-        script = 'nvt_equilibration.lammps'
-        command = 'lammps -var %s -in %s'%(lmp_npt, script)
-        subprocess.run(command, check=True, shell=True) 
-
-        # Check symmetry - post-NVT
-        try:
-            self._update_aflow_designation_from_atoms(structure_index,atoms_new)
-            raise RuntimeError("Symmetry of crystal changed during NVT equilibration!")
-
-        except KIMASEError as e:
-            print("We have successfully caught an exception with the following message:")
-            print(e.msg)
-
         ####################################################
         # ACTUAL CALCULATION ENDS 
         ####################################################
@@ -173,30 +219,29 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         """
 
     @staticmethod
-    def _reduce_and_avg(atoms, repeat):
+    def _reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
         '''
         Function to reduce all atoms to the original unit cell position.
-
-        @param atoms : repeated atoms object
-        @param repeat : repeat tuple
         '''
-        cell = atoms.get_cell()
+        new_atoms = atoms.copy()
+
+        cell = new_atoms.get_cell()
         
         # Divide each unit vector by its number of repeats.
         # See https://stackoverflow.com/questions/19602187/numpy-divide-each-row-by-a-vector-element.
         cell = cell / np.array(repeat)[:, None]
 
         # Decrease size of cell in the atoms object.
-        atoms.set_cell(cell)
-        atoms.set_pbc((True, True, True))
+        new_atoms.set_cell(cell)
+        new_atoms.set_pbc((True, True, True))
 
         # Set averaging factor
         M = np.prod(repeat)
 
         # Wrap back the repeated atoms on top of the reference atoms in the original unit cell.
-        positions = atoms.get_positions(wrap=True)
+        positions = new_atoms.get_positions(wrap=True)
         
-        number_atoms = len(atoms)
+        number_atoms = len(new_atoms)
         original_number_atoms = number_atoms // M
         assert number_atoms == original_number_atoms * M
         positions_in_prim_cell = np.zeros((original_number_atoms, 3))
@@ -206,25 +251,27 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             if i >= original_number_atoms:
                 # Get the distance to the reference atom in the original unit cell with the 
                 # minimum image convention.
-                distance = atoms.get_distance(i % original_number_atoms, i,
-                                              mic=True, vector=True)
+                distance = new_atoms.get_distance(i % original_number_atoms, i,
+                                                  mic=True, vector=True)
                 # Get the position that has the closest distance to the reference atom in the 
                 # original unit cell.
                 position_i = positions[i % original_number_atoms] + distance
                 # Remove atom from atoms object.
-                atoms.pop()
+                new_atoms.pop()
             else:
                 # Atom was part of the original unit cell.
                 position_i = positions[i]
             # Average.
             positions_in_prim_cell[i % original_number_atoms] += position_i / M
 
-        atoms.set_positions(positions_in_prim_cell)
+        new_atoms.set_positions(positions_in_prim_cell)
+
+        return new_atoms
     
     @staticmethod
-    def _extract_and_plot(property_names: Iterable[str]) -> None:
+    def _extract_and_plot(log_file: str, property_names: Iterable[str]) -> None:
         # extract data and save it as png file
-        subprocess.run(f"python extract_table.py output/lammps_equilibration.log "
+        subprocess.run(f"python extract_table.py {log_file} "
                        f"output/lammps_equilibration.csv {' '.join(property_names)}", check=True, shell=True)
 
     @staticmethod
@@ -273,5 +320,5 @@ if __name__ == "__main__":
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
     test_driver = HeatCapacityPhonon(model_name)
-    test_driver(bulk("Ar", "fcc", a=5.248), temperature = 10.0, pressure = 1.0, timestep=0.001, 
-                number_sampling_timesteps=10, repeat=(10, 10, 10), loose_triclinic_and_monoclinic=False)
+    test_driver(bulk("Ar", "fcc", a=5.248), temperature = 10.0, pressure = 1.0, temperature_offset_fraction=0.01, 
+                timestep=0.001, number_sampling_timesteps=100, repeat=(7, 7, 7), loose_triclinic_and_monoclinic=False)
