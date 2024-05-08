@@ -1,8 +1,15 @@
+zero_temperature_crystal.lmp
 average_position_equilibration.dump.*
 average_position_over_files.out
 final_configuration_equilibration.restart
 final_volume_equilibration.dat
+average_position_high_temperature.dump.*
+average_position_low_temperature.dump.*
 lammps_equilibration.log
-zero_temperature_crystal.lmp
-*.png
 lammps_equilibration.csv
+lammps_high_temperature.log
+lammps_high_temperature.csv
+lammps_low_temperature.log
+lammps_low_temperatue.csv
+*.png
+
