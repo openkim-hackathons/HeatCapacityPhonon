@@ -38,9 +38,12 @@ fix NPT all npt temp $(v_temperature*v__u_temperature) $(v_temperature*v__u_temp
 # Set timestep.
 timestep $(v_timestep*v__u_time)
 
+# Compute ke so that we can use it in a variable.
+compute thermo_ke all ke
+
 # Define variables in proper units.
 variable pe_metal equal "c_thermo_pe/v__u_energy"
-variable ke_metal equal ke/${_u_energy}
+variable ke_metal equal "c_thermo_ke/v__u_energy"
 variable temp_metal equal "c_thermo_temp/v__u_temperature"
 variable press_metal equal "c_thermo_press/v__u_pressure"
 variable vol_metal equal vol/${_u_distance}/${_u_distance}/${_u_distance}
@@ -53,10 +56,11 @@ variable zhi_metal equal zhi/${_u_distance}
 variable xy_metal equal xy/${_u_distance}
 variable xz_metal equal xz/${_u_distance}
 variable yz_metal equal yz/${_u_distance}
-variable enthalpy_metal equal enthalpy/${_u_energy}
-
-# Required to initialize ke and enthalpy.
-run 0
+# Lammps does not offer a simple compute command for the enthalpy (as for ke).
+# Lammps can only include the enthalpy in its thermo output.
+# Since we want to convert the units of the enthalpy, however, we have to define it ourselves.
+# In metal units: 1 bar Angstrom^3 = 6.241509074460762e-7 eV
+variable enthalpy_metal equal "v_pe_metal + v_ke_metal + v_press_metal * v_vol_metal * 6.241509074460762e-7"
 
 # Set up logging of thermodynamic information.
 thermo_style custom step v_pe_metal v_ke_metal v_temp_metal v_press_metal v_vol_metal &
