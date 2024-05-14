@@ -7,7 +7,8 @@ import numpy.typing as npt
 from ase import Atoms
 from ase.build import bulk
 from kim_test_utils.test_driver import CrystalGenomeTestDriver
-
+import re
+import matplotlib.pyplot as plt
 
 class HeatCapacityPhonon(CrystalGenomeTestDriver):
     def _calculate(self, temperature: float, pressure: float, temperature_offset_fraction: float,
@@ -92,15 +93,17 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             + " -in npt_equilibration.lammps")
         subprocess.run(command, check=True, shell=True)
 
-        # TODO: Remove subprocess call in this function.
-        self._extract_and_plot("output/lammps_equilibration.log", ("v_vol_metal", "v_temp_metal"))
+        # TODO: Remove subprocess call in this function.[done]
+        self._get_property_from_lammps_log("output/lammps_equilibration.log",("v_vol_metal", "v_temp_metal"))
         
         # TODO: Guanming changes this into a function call and also removes the average_position_equilibration.dump.* files.
-        subprocess.run("python compute_average_positions.py", check=True, shell=True)
-
+        # [done] I did not remove the average*.dump.* files since they are the data, I can remove them by one line if necessary
+   
+        self._compute_average_positions_from_lammps_dump("./output","average_position_equilibration.dump")
+        
         # Check symmetry - post-NPT
-        atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_over_files.out"))
-        atoms_new.set_scaled_positions(self._get_positions_from_lammps_dump("output/average_position_over_files.out"))
+        atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_equilibration_over_dump.out"))
+        atoms_new.set_scaled_positions(self._get_positions_from_lammps_dump("output/average_position_equilibration_over_dump.out"))
 
         # Reduce and average
         reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
@@ -130,12 +133,16 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             + " -in npt_heat_capacity.lammps")
         subprocess.run(command, check=True, shell=True)
 
-        # TODO: Once extract_and_plot is a function call, allow to change the output file names.
-        self._extract_and_plot("output/lammps_high_temperature.log", ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
+        # TODO: Once extract_and_plot is a function call, allow to change the output file names.[done]
+        self._get_property_from_lammps_log("output/lammps_high_temperature.log",("v_vol_metal", "v_temp_metal","v_enthalpy_metal"))
 
         # TODO: Once Guanming changed compute_average_positions.py into a function call, use this function on the 
         # output/average_position_high_temperature.dump.* files to obtain an averaged position in this run and to check if
         # the symmetry is unbroken.
+        # Additional comments:(warp into a function call is done)
+        # call self._compute_average_positions_from_lammps_dump("./output","average_position_high_temperature.dump") to generate the average positions
+        # then call self._get_positions_from_lammps_dump("output/average_position_high_temperature_over_dump.out") to get the data
+        
 
         # Run second NPT simulation at lower temperature.
         variables = {
@@ -158,12 +165,14 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             + " -in npt_heat_capacity.lammps")
         subprocess.run(command, check=True, shell=True)
 
-        # TODO: Once extract_and_plot is a function call, allow to change the output file names.
-        self._extract_and_plot("output/lammps_low_temperature.log", ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
-
+        # TODO: Once extract_and_plot is a function call, allow to change the output file names.[done]
+        self._get_property_from_lammps_log("output/lammps_low_temperature.log", ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
         # TODO: Once Guanming changed compute_average_positions.py into a function call, use this function on the 
         # output/average_position_high_temperature.dump.* files to obtain an averaged position in this run and to check if
         # the symmetry is unbroken.
+        # Additional comments
+        # call self._compute_average_positions_from_lammps_dump("./output","average_position_low_temperature.dump") to generate the average positions
+        # then call self._get_positions_from_lammps_dump("output/average_position_low_temperature_over_dump.out") to get the data
 
         # TODO: Compute heat capacity from reported enthalpy average in the previous simulations and store it into a property.
 
@@ -269,10 +278,165 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         return new_atoms
     
     @staticmethod
-    def _extract_and_plot(log_file: str, property_names: Iterable[str]) -> None:
-        # extract data and save it as png file
-        subprocess.run(f"python extract_table.py {log_file} "
-                       f"output/lammps_equilibration.csv {' '.join(property_names)}", check=True, shell=True)
+    def _get_property_from_lammps_log(in_file_path:str="./output/lammps_equilibration.log",property_names:list = ["v_vol_metal", "v_temp_metal"]):
+        '''
+        The function to get the value of the property with time from ***.log 
+        the extracted data are stored as ***.csv and ploted as property_name.png
+        data_dir --- the directory contains lammps_equilibration.log 
+        property_names --- the list of properties
+        '''
+        def get_table(in_file):
+            if not os.path.isfile(in_file):
+                raise FileNotFoundError(in_file + "not found")
+            elif not ".log" in in_file:
+                raise FileNotFoundError("The file is not a *.log file")
+            is_first_header = True
+            header_flags  = ["Step", "v_pe_metal", "v_temp_metal", "v_press_metal"]
+            eot_flags  = ["Loop", "time", "on", "procs", "for", "steps"]
+            table = []
+            with open(in_file, "r") as f:
+                line = f.readline()
+                while line: # not EOF
+                    is_header = True
+                    for _s in header_flags:
+                        is_header = is_header and (_s in line)
+                    if is_header:
+                        if is_first_header:
+                            table.append(line)
+                            is_first_header = False
+                        content = f.readline()
+                        while content:
+                            is_eot = True
+                            for _s in eot_flags:
+                                is_eot = is_eot and (_s in content)
+                            if not is_eot:
+                                table.append(content)
+                            else:
+                                break
+                            content = f.readline()
+                    line = f.readline()
+            return table
+        def write_table(table,out_file):
+            with open(out_file, "w") as f:
+                for l in table:
+                    f.writelines(l)
+        dir_name = os.path.dirname(in_file_path)
+        in_file_name = os.path.basename(in_file_path)
+        out_file_path = os.path.join(dir_name,in_file_name.replace(".log",".csv"))
+    
+        table = get_table(in_file_path)
+        write_table(table,out_file_path)
+        df = np.loadtxt(out_file_path, skiprows=1)
+    
+        for property_name in property_names:
+            with open(out_file_path) as file:
+                first_line = file.readline().strip("\n")
+            property_index = first_line.split().index(property_name)
+            properties = df[:, property_index]
+            step = df[:, 0]
+            plt.plot(step, properties)
+            plt.xlabel("step")
+            plt.ylabel(property_name)
+            img_file =  os.path.join(dir_name, in_file_name.replace(".log","_")+property_name +".png")
+            plt.savefig(img_file, bbox_inches="tight")
+            plt.close()
+    
+    @staticmethod
+    def _compute_average_positions_from_lammps_dump(data_dir:str = "./output",file_str = "average_position.dump"):
+        '''
+        This function compute the average position over *.dump files which contains the file_str (default:average_position.dump) in data_dir and output it
+        to data_dir/[file_str]_over_dump.out
+ 
+        input:
+        data_dir-- the directory contains all the data e.g average_position.dump.* files
+        '''
+
+        def get_id_pos_dict(file_name:str) -> dict:
+            '''
+            input: 
+            file_name--the file_name that contains average postion data
+            output:
+            the dictionary contains id:position pairs e.g {1:array([x1,y1,z1]),2:array([x2,y2,z2])}
+            for the averaged positions over files
+            '''
+            id_pos_dict = {}
+            header4N = ["NUMBER OF ATOMS"]
+            header4pos = ["id","f_avePos[1]","f_avePos[2]","f_avePos[3]"]
+            is_table_started = False
+            is_natom_read = False
+            with open(file_name,"r") as f:
+                line = f.readline()
+                count_content_line = 0
+                N = 0
+                while line:
+                    if not is_natom_read:
+                        is_natom_read = np.all([flag in line for flag in header4N])
+                        if is_natom_read:
+                            line = f.readline()
+                            N = int(line)
+                    if not is_table_started:
+                        contain_flags = np.all([flag in line for flag in header4pos])
+                        is_table_started = contain_flags
+                    else:
+                        count_content_line += 1        
+                        words = line.split()
+                        id = int(words[0])
+                        #pos = np.array([float(words[2]),float(words[3]),float(words[4])])
+                        pos = np.array([float(words[1]),float(words[2]),float(words[3])])
+                        id_pos_dict[id] = pos 
+                    if count_content_line > 0 and count_content_line >= N:
+                        break
+                    line = f.readline()
+            if count_content_line < N:
+                print("The file " + file_name +
+                      " is not complete, the number of atoms is smaller than " + str(N))
+            return id_pos_dict
+
+        if not os.path.isdir(data_dir):
+            raise FileNotFoundError(data_dir + " does not exist")
+        if not ".dump" in file_str:
+            raise ValueError("file_str must be a string containing .dump")
+
+        # extract and store all the data
+        pos_list = []
+        max_step,last_step_file = -1, ""
+        for file_name in os.listdir(data_dir):
+            if file_str in file_name:
+                file_path = os.path.join(data_dir,file_name)
+                id_pos_dict = get_id_pos_dict(file_path)
+                id_pos = sorted(id_pos_dict.items())
+                id_list = [pair[0] for pair in id_pos]
+                pos_list.append([pair[1] for pair in id_pos])
+                # check if this is the last step
+                step = int(re.findall(r'\d+', file_name)[-1])
+                if step > max_step:
+                    last_step_file,max_step = os.path.join(data_dir ,file_name),step 
+        pos_arr = np.array(pos_list)
+        avg_pos = np.mean(pos_arr,axis=0)
+        # get the lines above the table from the file of the last step
+        with open(last_step_file,"r") as f:
+            header4pos = ["id","f_avePos[1]","f_avePos[2]","f_avePos[3]"]
+            line = f.readline()
+            description_str = ""
+            is_table_started = False
+            while line:
+                description_str += line
+                is_table_started = np.all([flag in line for flag in header4pos])
+                if is_table_started:
+                    break
+                else:
+                    line = f.readline()
+        # write the output to the file
+        output_file = os.path.join(data_dir,file_str.replace(".dump","_over_dump.out"))
+        with open(output_file,"w") as f:
+            f.write(description_str)
+            for i in range(len(id_list)):
+                f.write(str(id_list[i]))
+                f.write("  ")
+                for dim in range(3):
+                    f.write('{:3.6}'.format(avg_pos[i,dim]))
+                    f.write("  ")
+                f.write("\n")
 
     @staticmethod
     def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
@@ -320,5 +484,5 @@ if __name__ == "__main__":
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
     test_driver = HeatCapacityPhonon(model_name)
-    test_driver(bulk("Ar", "fcc", a=5.248), temperature = 10.0, pressure = 1.0, temperature_offset_fraction=0.01, 
-                timestep=0.001, number_sampling_timesteps=100, repeat=(7, 7, 7), loose_triclinic_and_monoclinic=False)
+    test_driver(bulk("Ar", "fcc", a=5.248), temperature = 1.0, pressure = 1.0, temperature_offset_fraction=0.01, 
+                timestep=0.001, number_sampling_timesteps=10, repeat=(5, 5, 5), loose_triclinic_and_monoclinic=False)
