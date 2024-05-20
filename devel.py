@@ -9,6 +9,7 @@ from ase.build import bulk
 from kim_test_utils.test_driver import CrystalGenomeTestDriver
 import re
 import matplotlib.pyplot as plt
+from extract_heat_capacity import *
 
 class HeatCapacityPhonon(CrystalGenomeTestDriver):
     def _calculate(self, temperature: float, pressure: float, temperature_offset_fraction: float,
@@ -165,6 +166,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             + " -in npt_heat_capacity.lammps")
         subprocess.run(command, check=True, shell=True)
 
+    
         # TODO: Once extract_and_plot is a function call, allow to change the output file names.[done]
         self._get_property_from_lammps_log("output/lammps_low_temperature.log", ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
         # TODO: Once Guanming changed compute_average_positions.py into a function call, use this function on the 
@@ -175,6 +177,9 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         # then call self._get_positions_from_lammps_dump("output/average_position_low_temperature_over_dump.out") to get the data
 
         # TODO: Compute heat capacity from reported enthalpy average in the previous simulations and store it into a property.
+        f1 = "output/lammps_high_temperature.log"
+        f2 = "output/lammps_low_temperature.log"
+        c, c_err = compute_heat_capacity(f1, f2, 2)
 
         """
         ####################################################
@@ -214,14 +219,15 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         # Import data
         cv = np.loadtxt('cv.dat')
         cp = np.loadtxt('cp.dat')
+        """
 
         # Assign property
         self._add_property_instance("heat_capacity")
         self._add_common_crystal_genome_keys_to_current_property_instance(structure_index,write_stress=False,write_temp=False) # last two default to False
-        self._add_key_to_current_property_instance("constant_pressure_heat_capacity",constant_pressure_heat_capacity,"eV/Kelvin")
-        self._add_key_to_current_property_instance("constant_volume_heat_capacity",constant_volume_heat_capacity,"eV/Kelvin")
-        self._add_key_to_current_property_instance("volume", volume, "Angstroms^3")
-        self._add_key_to_current_property_instance("pressure", pressure, "bars")
+        self._add_key_to_current_property_instance("constant_pressure_heat_capacity",c,"eV/Kelvin")
+        self._add_key_to_current_property_instance("constant_pressure_heat_capacity_err",c_err,"eV/Kelvin")
+        self._add_key_to_current_property_instance("pressure", variables['pressure'], "Angstroms^3")
+        """
         ####################################################
         # PROPERTY WRITING END
         ####################################################
