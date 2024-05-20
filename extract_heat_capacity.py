@@ -59,7 +59,7 @@ def compute_heat_capacity(f1:str, f2:str, eps:float, quantity:int):
     # Error computation
     dx = H_plus_mean - H_plus_err
     dy = H_minus_mean - H_minus_err
-    c_err = np.sqrt(((dx / (2 * eps)) ** 2) - ((dy / (2 * eps)) ** 2))
+    c_err = np.sqrt(((dx / (2 * eps)) ** 2) + (- (dy / (2 * eps)) ** 2))
 
     # Return
     return c, c_err
