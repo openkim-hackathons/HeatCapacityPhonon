@@ -9,7 +9,7 @@ from ase.build import bulk
 from kim_test_utils.test_driver import CrystalGenomeTestDriver
 import re
 import matplotlib.pyplot as plt
-from extract_heat_capacity import *
+from extract_property import *
 
 class HeatCapacityPhonon(CrystalGenomeTestDriver):
     def _calculate(self, temperature: float, pressure: float, temperature_offset_fraction: float,
@@ -92,7 +92,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "lammps " 
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_equilibration.lammps")
-        subprocess.run(command, check=True, shell=True)
+        #subprocess.run(command, check=True, shell=True)
 
         # TODO: Remove subprocess call in this function.[done]
         self._get_property_from_lammps_log("output/lammps_equilibration.log",("v_vol_metal", "v_temp_metal"))
@@ -132,7 +132,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "lammps " 
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_heat_capacity.lammps")
-        subprocess.run(command, check=True, shell=True)
+        #subprocess.run(command, check=True, shell=True)
 
         # TODO: Once extract_and_plot is a function call, allow to change the output file names.[done]
         self._get_property_from_lammps_log("output/lammps_high_temperature.log",("v_vol_metal", "v_temp_metal","v_enthalpy_metal"))
@@ -164,7 +164,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "lammps " 
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_heat_capacity.lammps")
-        subprocess.run(command, check=True, shell=True)
+        #subprocess.run(command, check=True, shell=True)
 
     
         # TODO: Once extract_and_plot is a function call, allow to change the output file names.[done]
@@ -179,7 +179,14 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         # TODO: Compute heat capacity from reported enthalpy average in the previous simulations and store it into a property.
         f1 = "output/lammps_high_temperature.log"
         f2 = "output/lammps_low_temperature.log"
-        c, c_err = compute_heat_capacity(f1, f2, 2)
+        eps = temperature_offset_fraction * temperature
+        c, c_err = compute_heat_capacity(f1, f2, eps, 2)
+        print(c)
+        print(c_err)
+
+        # I have to do this or KIM tries to save some coordinate file
+        # TODO: be less lazy and find out why this is
+        self.poscar = None
 
         """
         ####################################################
@@ -215,15 +222,10 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         ####################################################
         # PROPERTY WRITING
         ####################################################
-
-        # Import data
-        cv = np.loadtxt('cv.dat')
-        cp = np.loadtxt('cp.dat')
         """
 
         # Assign property
-        self._add_property_instance("heat_capacity")
-        self._add_common_crystal_genome_keys_to_current_property_instance(structure_index,write_stress=False,write_temp=False) # last two default to False
+        self._add_property_instance_and_common_crystal_genome_keys("heat-capacity-phonon-npt", write_stress=True, write_temp=True) # last two default to False
         self._add_key_to_current_property_instance("constant_pressure_heat_capacity",c,"eV/Kelvin")
         self._add_key_to_current_property_instance("constant_pressure_heat_capacity_err",c_err,"eV/Kelvin")
         self._add_key_to_current_property_instance("pressure", variables['pressure'], "Angstroms^3")

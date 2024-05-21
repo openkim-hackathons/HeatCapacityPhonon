@@ -31,8 +31,8 @@ def extract_mean_error_from_logfile(filename:str, quantity:int):
         raise ValueError('Error not found')
 
     # Get correct match
-    mean = mean_matches[quantity]
-    error = error_matches[quantity]
+    mean = float(mean_matches[quantity])
+    error = float(error_matches[quantity])
 
     # Return
     return mean, error
@@ -51,42 +51,16 @@ def compute_heat_capacity(f1:str, f2:str, eps:float, quantity:int):
     '''
 
     # Extract mean values
-    H_plus_mean, H_plus_err = extract_mean_error_from_logfile(f1)
-    H_minus_mean, H_minus_err = extract_mean_error_from_logfile(f2)
+    H_plus_mean, H_plus_err = extract_mean_error_from_logfile(f1, quantity)
+    H_minus_mean, H_minus_err = extract_mean_error_from_logfile(f2, quantity)
 
     # Compute heat capacity
     c = (H_plus_mean - H_minus_mean) / (2 * eps)
 
     # Error computation
-    dx = H_plus_mean - H_plus_err
-    dy = H_minus_mean - H_minus_err
+    dx = 2 * H_plus_err
+    dy = 2 * H_minus_err
     c_err = np.sqrt(((dx / (2 * eps)) ** 2) + (- (dy / (2 * eps)) ** 2))
 
     # Return
     return c, c_err
-
-# Function to get property
-def extract_property(f1_nvt:str, f2_nvt:str, f1_npt:str, f2_npt:str):
-    '''
-    Function to extract all relevant data for a property to be written
-
-    @param f1_nvt : filename for first simulation at NVT
-    @param f2_nvt : filename for second simulation at NVT
-    @param f1_npt : filename for first simulation at NPT
-    @param f2_npt : filename for second simulation at NPT
-    '''
-
-    # Set property dictionary
-    prop = {
-        'constant_volume_heat_capacity' : None,
-        'constant_volume_heat_capacity_err' : None,
-        'constant_pressure_heat_capacity' : None,
-        'constant_pressure_heat_capacity_err' : None
-    }
-
-    # Set property values
-    prop['constant_volume_heat_capacity'], prop['constant_volume_heat_capacity_err'] = compute_heat_capacity(f1_nvt, f2_nvt, 2)
-    prop['constant_pressure_heat_capacity'], prop['constant_pressure_heat_capacity_err'] = compute_heat_capacity(f1_npt, f2_npt, 2)
-
-    # Return property
-    return prop
