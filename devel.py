@@ -232,7 +232,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         self._add_property_instance_and_common_crystal_genome_keys("heat-capacity-phonon-npt", write_stress=True, write_temp=True) # last two default to False
         self._add_key_to_current_property_instance("constant_pressure_heat_capacity",c,"eV/Kelvin")
         self._add_key_to_current_property_instance("constant_pressure_heat_capacity_err",c_err,"eV/Kelvin")
-        self._add_key_to_current_property_instance("pressure", variables['pressure'], "Angstroms^3")
+        self._add_key_to_current_property_instance("pressure", variables['pressure'], "bars")
         """
         ####################################################
         # PROPERTY WRITING END
