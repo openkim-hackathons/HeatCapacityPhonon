@@ -181,11 +181,15 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         f2 = "output/lammps_low_temperature.log"
         eps = temperature_offset_fraction * temperature
         c, c_err = compute_heat_capacity(f1, f2, eps, 2)
-        print(c)
-        print(c_err)
+
+        # Print Result
+        print('####################################')
+        print('# NPT Phonon Heat Capacity Results #')
+        print('####################################')
+        print(f'C_p:\t{c}')
+        print(f'C_p Error:\t{c_err}')
 
         # I have to do this or KIM tries to save some coordinate file
-        # TODO: be less lazy and find out why this is
         self.poscar = None
 
         """
