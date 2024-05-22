@@ -92,7 +92,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "lammps " 
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_equilibration.lammps")
-        #subprocess.run(command, check=True, shell=True)
+        subprocess.run(command, check=True, shell=True)
 
         # TODO: Remove subprocess call in this function.[done]
         self._get_property_from_lammps_log("output/lammps_equilibration.log",("v_vol_metal", "v_temp_metal"))
@@ -132,7 +132,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "lammps " 
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_heat_capacity.lammps")
-        #subprocess.run(command, check=True, shell=True)
+        subprocess.run(command, check=True, shell=True)
 
         # TODO: Once extract_and_plot is a function call, allow to change the output file names.[done]
         self._get_property_from_lammps_log("output/lammps_high_temperature.log",("v_vol_metal", "v_temp_metal","v_enthalpy_metal"))
@@ -164,7 +164,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "lammps " 
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items()) 
             + " -in npt_heat_capacity.lammps")
-        #subprocess.run(command, check=True, shell=True)
+        subprocess.run(command, check=True, shell=True)
 
     
         # TODO: Once extract_and_plot is a function call, allow to change the output file names.[done]
