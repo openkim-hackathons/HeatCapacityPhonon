@@ -278,7 +278,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         return new_atoms
     
     @staticmethod
-    def _get_property_from_lammps_log(in_file_path:str="./output/lammps_equilibration.log",property_names:list = ["v_vol_metal", "v_temp_metal"]):
+    def _get_property_from_lammps_log(in_file_path: str, property_names: Iterable[str]):
         '''
         The function to get the value of the property with time from ***.log 
         the extracted data are stored as ***.csv and ploted as property_name.png
@@ -322,7 +322,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
                     f.writelines(l)
         dir_name = os.path.dirname(in_file_path)
         in_file_name = os.path.basename(in_file_path)
-        out_file_path = os.path.join(dir_name,in_file_name.replace(".log",".csv"))
+        out_file_path = os.path.join(dir_name, in_file_name.replace(".log", ".csv"))
     
         table = get_table(in_file_path)
         write_table(table,out_file_path)
@@ -484,5 +484,5 @@ if __name__ == "__main__":
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
     test_driver = HeatCapacityPhonon(model_name)
-    test_driver(bulk("Ar", "fcc", a=5.248), temperature = 1.0, pressure = 1.0, temperature_offset_fraction=0.01, 
-                timestep=0.001, number_sampling_timesteps=10, repeat=(5, 5, 5), loose_triclinic_and_monoclinic=False)
+    test_driver(bulk("Ar", "fcc", a=5.248), temperature = 10.0, pressure = 1.0, temperature_offset_fraction=0.01, 
+                timestep=0.001, number_sampling_timesteps=100, repeat=(7, 7, 7), loose_triclinic_and_monoclinic=False)
