@@ -1,30 +1,15 @@
 {
-  "property-id" "tag:staff@noreply.openkim.org,2024-03-11:property/heat_capacity"
+  "property-id" "tag:staff@noreply.openkim.org,2024-03-11:property/heat-capacity-phonon-npt"
 
-  "property-title" "Heat capacity of crystal"
+  "property-title" "Phonon heat capacity of crystal at NPT"
 
-  "property-description" "Heat capacity of a crystal calculated at constant pressure and constant volume.
-  This is computed from two separate simulations (NPT and NVT) using kim-convergence for convergence verification."
+  "property-description" "Heat capacity of a crystal calculated at constant pressure.
+  This is computed from two NPT simulations by finite difference, using kim-convergence
+  for convergence verification."
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; CHANGE THE SECTION BELOW WHEN CREATING NEW PROPERTIES
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-  "constant_volume_heat_capacity" {
-    "type"         "float"
-    "has-unit"     true
-    "extent"       []
-    "required"     true
-    "description" "Constant volume phonon heat capacity of solid."
-  }
-
-  "constant_volume_heat_capacity_err" {
-    "type"         "float"
-    "has-unit"     true
-    "extent"       []
-    "required"     true
-    "description" "Error in constant volume phonon heat capacity of solid."
-  }
 
   "constant_pressure_heat_capacity" {
     "type"         "float"
@@ -34,7 +19,7 @@
     "description" "Constant pressure phonon heat capacity of solid"
   }
 
-    "constant_pressure_heat_capacity_err" {
+  "constant_pressure_heat_capacity_err" {
     "type"         "float"
     "has-unit"     true
     "extent"       []
@@ -42,17 +27,9 @@
     "description" "Error in constant volume phonon heat capacity of solid."
   }
 
-  "volume" {
-    "type"          "float"
-    "has_unit"      true
-    "extent"        []
-    "required"      true
-    "description"   "Volume of system"
-  }
-
   "pressure" {
     "type"          "float"
-    "has_unit"      true
+    "has-unit"      true
     "extent"        []
     "required"      true
     "description"   "Pressure of system"
@@ -73,12 +50,13 @@
     "required"     true
     "description"  "Temperature of the crystal."
   }
+
   "cell-cauchy-stress" {
     "type"         "float"
     "has-unit"     true
     "extent"       [6]
     "required"     true
-    "description"  "The [xx,yy,zz,yz,xz,xy] components of the prescribed symmetric Cauchy stress tensor. The numerical value of the stress tensor of a test result or reference data may be different due to tolerance, and can be checked by inspecting the output files of the test or the reference data description. The components should be expressed in the same coordinate system as the structure specified by prototype-label and parameter-values, with the orientation of lattice vectors defined in M. J. Mehl et al., Comput. Mater. Sci. 136, S1 (2017)."
+    "description"  "The [xx,yy,zz,yz,xz,xy] components of the symmetric Cauchy stress tensor at the reference configuration at which the bulk modulus is evaluated. The components should be expressed in the same coordinate system as the structure specified by prototype-label and parameter-values, with the orientation of lattice vectors defined in M. J. Mehl et al., Comput. Mater. Sci. 136, S1 (2017)."
   }
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
