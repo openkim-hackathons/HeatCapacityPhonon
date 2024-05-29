@@ -63,6 +63,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         atoms_new.write(structure_file, format="lammps-data", masses=True)
 
         # Get random 31-bit unsigned integer.
+        # TODO: Add seed to property.
         if seed is None:
             seed = random.getrandbits(31)
 
@@ -87,29 +88,20 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "write_restart_filename": "output/final_configuration_equilibration.restart"
         }
         # TODO: Possibly run MPI version of Lammps if available.
-        # TODO: Maybe use initial temperature ramp.
         command = (
             "lammps "
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
             + " -in npt_equilibration.lammps")
         subprocess.run(command, check=True, shell=True)
 
-        # TODO: Remove subprocess call in this function.[done]
-        self._get_property_from_lammps_log("output/lammps_equilibration.log", ("v_vol_metal", "v_temp_metal"))
-
-        # TODO: Guanming changes this into a function call and also removes the average_position_equilibration.dump.* files.
-        # [done] I did not remove the average*.dump.* files since they are the data, I can remove them by one line if necessary
-
-        self._compute_average_positions_from_lammps_dump("./output", "average_position_equilibration.dump")
-
-        # Check symmetry - post-NPT
+        # Analyse equilibration run.
+        self._plot_property_from_lammps_log("output/lammps_equilibration.log", ("v_vol_metal", "v_temp_metal"))
+        self._compute_average_positions_from_lammps_dump("output", "average_position_equilibration.dump",
+                                                         "output/average_position_equilibration_over_dump.out")
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_equilibration_over_dump.out"))
-        atoms_new.set_scaled_positions(self._get_positions_from_lammps_dump(
-            "output/average_position_equilibration_over_dump.out"))
-
-        # Reduce and average
+        atoms_new.set_scaled_positions(
+            self._get_positions_from_lammps_dump("output/average_position_equilibration_over_dump.out"))
         reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
-
         # AFLOW Symmetry check
         self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
             reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
@@ -135,16 +127,18 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             + " -in npt_heat_capacity.lammps")
         subprocess.run(command, check=True, shell=True)
 
-        # TODO: Once extract_and_plot is a function call, allow to change the output file names.[done]
-        self._get_property_from_lammps_log("output/lammps_high_temperature.log",
+        # Analyse high-temperature NPT run.
+        self._plot_property_from_lammps_log("output/lammps_high_temperature.log",
                                            ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
-
-        # TODO: Once Guanming changed compute_average_positions.py into a function call, use this function on the
-        # output/average_position_high_temperature.dump.* files to obtain an averaged position in this run and to check if
-        # the symmetry is unbroken.
-        # Additional comments:(warp into a function call is done)
-        # call self._compute_average_positions_from_lammps_dump("./output","average_position_high_temperature.dump") to generate the average positions
-        # then call self._get_positions_from_lammps_dump("output/average_position_high_temperature_over_dump.out") to get the data
+        self._compute_average_positions_from_lammps_dump("output", "average_position_high_temperature.dump",
+                                                         "output/average_position_high_temperature_over_dump.out")
+        atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_high_temperature_over_dump.out"))
+        atoms_new.set_scaled_positions(
+            self._get_positions_from_lammps_dump("output/average_position_high_temperature_over_dump.out"))
+        reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
+        # AFLOW Symmetry check
+        self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
+            reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
 
         # Run second NPT simulation at lower temperature.
         variables = {
@@ -160,24 +154,26 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "average_position_filename": "output/average_position_low_temperature.dump.*",
             "read_restart_filename": "output/final_configuration_equilibration.restart"
         }
-        # TODO: Possibly run MPI version of Lammps if available.
         command = (
             "lammps "
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
             + " -in npt_heat_capacity.lammps")
         subprocess.run(command, check=True, shell=True)
 
-        # TODO: Once extract_and_plot is a function call, allow to change the output file names.[done]
-        self._get_property_from_lammps_log("output/lammps_low_temperature.log",
-                                           ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
-        # TODO: Once Guanming changed compute_average_positions.py into a function call, use this function on the
-        # output/average_position_high_temperature.dump.* files to obtain an averaged position in this run and to check if
-        # the symmetry is unbroken.
-        # Additional comments
-        # call self._compute_average_positions_from_lammps_dump("./output","average_position_low_temperature.dump") to generate the average positions
-        # then call self._get_positions_from_lammps_dump("output/average_position_low_temperature_over_dump.out") to get the data
-
-        # TODO: Compute heat capacity from reported enthalpy average in the previous simulations and store it into a property.
+        # Analyse low-temperature NPT run.
+        self._plot_property_from_lammps_log("output/lammps_low_temperature.log",
+                                            ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
+        self._compute_average_positions_from_lammps_dump("output", "average_position_low_temperature.dump",
+                                                         "output/average_position_low_temperature_over_dump.out")
+        atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_low_temperature_over_dump.out"))
+        atoms_new.set_scaled_positions(
+            self._get_positions_from_lammps_dump("output/average_position_low_temperature_over_dump.out"))
+        # Reduce and average
+        reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
+        # AFLOW Symmetry check
+        self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
+            reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
+        
         f1 = "output/lammps_high_temperature.log"
         f2 = "output/lammps_low_temperature.log"
         eps = temperature_offset_fraction * temperature
@@ -193,53 +189,12 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         # I have to do this or KIM tries to save some coordinate file
         self.poscar = None
 
-        """
-        ####################################################
-        # ACTUAL CALCULATION ENDS 
-        ####################################################
-
-        ####################################################
-        # SOME USAGE EXAMPLES NOT NECESSARY FOR THE PRESENT TEST 
-        ####################################################
-        # This is unnecessary here because we are not changing the atoms object, but if we were and we needed to re-analyze, this is how you do it 
-        self.atoms[structure_index].set_cell(original_cell,scale_atoms=True)
-        self._update_aflow_designation_from_atoms(structure_index)
-
-        # alternatively, you can update the `structure_index`-th AFLOW symmetry designation from a specified atoms object instead of from 
-        # self.atoms[structure_index]. The function will also raise an error if the prototype label changes, so you can use it as a try-except to detect
-        # symmetry changes
-        atoms_new = atoms.copy()
-        cell = atoms_new.get_cell()
-        cell[1,2] += 0.5 # this is highly likely to change the symmetry
-        atoms_new.set_cell(cell,scale_atoms=True)
-
-        try:
-            # this will intentionally raise an exception to demonstrate changing symmetry issue
-            self._update_aflow_designation_from_atoms(structure_index,atoms_new)
-            raise RuntimeError("We should not have gotten here")
-        except KIMASEError as e:
-            print("We have successfully caught an exception with the following message:")
-            print(e.msg)
-        ####################################################
-        # USAGE EXAMPLES END
-        ####################################################
-
-        ####################################################
-        # PROPERTY WRITING
-        ####################################################
-        """
-
-        # Assign property
+        # Write property
         self._add_property_instance_and_common_crystal_genome_keys(
             "heat-capacity-phonon-npt", write_stress=True, write_temp=True)  # last two default to False
         self._add_key_to_current_property_instance("constant_pressure_heat_capacity", c, "eV/Kelvin")
         self._add_key_to_current_property_instance("constant_pressure_heat_capacity_err", c_err, "eV/Kelvin")
         self._add_key_to_current_property_instance("pressure", variables['pressure'], "bars")
-        """
-        ####################################################
-        # PROPERTY WRITING END
-        ####################################################
-        """
 
     @staticmethod
     def _reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
@@ -292,7 +247,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         return new_atoms
 
     @staticmethod
-    def _get_property_from_lammps_log(in_file_path: str, property_names: Iterable[str]):
+    def _plot_property_from_lammps_log(in_file_path: str, property_names: Iterable[str]):
         '''
         The function to get the value of the property with time from ***.log 
         the extracted data are stored as ***.csv and ploted as property_name.png
@@ -357,9 +312,9 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             plt.close()
 
     @staticmethod
-    def _compute_average_positions_from_lammps_dump(data_dir: str = "./output", file_str="average_position.dump"):
+    def _compute_average_positions_from_lammps_dump(data_dir: str, file_str: str, output_filename: str) -> None:
         '''
-        This function compute the average position over *.dump files which contains the file_str (default:average_position.dump) in data_dir and output it
+        This function compute the average position over *.dump files which contains the file_str in data_dir and output it
         to data_dir/[file_str]_over_dump.out
 
         input:
@@ -441,9 +396,8 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
                     break
                 else:
                     line = f.readline()
-        # write the output to the file
-        output_file = os.path.join(data_dir, file_str.replace(".dump", "_over_dump.out"))
-        with open(output_file, "w") as f:
+        # Write the output to the file
+        with open(output_filename, "w") as f:
             f.write(description_str)
             for i in range(len(id_list)):
                 f.write(str(id_list[i]))
