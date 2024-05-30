@@ -83,7 +83,6 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "timestep": timestep,
             "number_sampling_timesteps": number_sampling_timesteps,
             "species": " ".join(species),
-            "log_filename": "output/lammps_equilibration.log",
             "average_position_filename": "output/average_position_equilibration.dump.*",
             "average_cell_filename": "output/average_cell_equilibration.dump",
             "write_restart_filename": "output/final_configuration_equilibration.restart"
@@ -92,6 +91,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         command = (
             "lammps "
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
+            + " -log output/lammps_equilibration.log"
             + " -in npt_equilibration.lammps")
         subprocess.run(command, check=True, shell=True)
 
@@ -117,7 +117,6 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "timestep": timestep,
             "number_sampling_timesteps": number_sampling_timesteps,
             "species": " ".join(species),
-            "log_filename": "output/lammps_high_temperature.log",
             "average_position_filename": "output/average_position_high_temperature.dump.*",
             "average_cell_filename": "output/average_cell_high_temperature.dump",
             "read_restart_filename": "output/final_configuration_equilibration.restart"
@@ -126,6 +125,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         command = (
             "lammps "
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
+            + " -log output/lammps_high_temperature.log"
             + " -in npt_heat_capacity.lammps")
         subprocess.run(command, check=True, shell=True)
 
@@ -152,7 +152,6 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "timestep": timestep,
             "number_sampling_timesteps": number_sampling_timesteps,
             "species": " ".join(species),
-            "log_filename": "output/lammps_low_temperature.log",
             "average_position_filename": "output/average_position_low_temperature.dump.*",
             "average_cell_filename": "output/average_cell_low_temperature.dump",
             "read_restart_filename": "output/final_configuration_equilibration.restart"
@@ -160,6 +159,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         command = (
             "lammps "
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
+            + " -log output/lammps_low_temperature.log"
             + " -in npt_heat_capacity.lammps")
         subprocess.run(command, check=True, shell=True)
 

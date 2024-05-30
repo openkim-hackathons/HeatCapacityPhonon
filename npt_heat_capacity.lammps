@@ -1,6 +1,3 @@
-# Set up logging.
-log ${log_filename}
-
 # Set the OpenKIM model and units that will be used.
 kim init ${modelname} metal unit_conversion_mode
 
