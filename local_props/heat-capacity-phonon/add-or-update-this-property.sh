@@ -4,17 +4,20 @@
 
 property_dir=$PWD
 
-cd /home/openkim/kim-property
-
 python -c \
-"from kim_property import get_properties;
-from kim_property.pickle import pickle_kim_properties;
+"import kim_property;
+import os;
+assert os.access(kim_property.__path__[0],os.W_OK), 'kim_property must be installed in an editable location';
+from packaging import version;
 from kim_edn import load;
 from pprint import PrettyPrinter;
-properties=get_properties();
+properties=kim_property.get_properties();
 property=load('$property_dir/property.edn');
-property_id=property['property-id']
+property_id=property['property-id'];
 properties[property_id]=property;
-pickle_kim_properties(properties);
-PrettyPrinter().pprint(get_properties()[property_id]);
-print('\n\nSuccessfully pickled properties! Scroll up to check the property you just added.');"
+if version.parse(kim_property.__version__) < version.parse('2.6.0'):
+   kim_property.pickle.pickle_kim_properties(properties);
+else:
+   kim_property.ednify.ednify_kim_properties(properties);
+PrettyPrinter().pprint(kim_property.get_properties()[property_id]);
+print('\n\nSuccessfully pickled or ednified properties! Scroll up to check the property you just added.');"
