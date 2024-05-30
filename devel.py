@@ -131,7 +131,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
 
         # Analyse high-temperature NPT run.
         self._plot_property_from_lammps_log("output/lammps_high_temperature.log",
-                                           ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
+                                            ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
         self._compute_average_positions_from_lammps_dump("output", "average_position_high_temperature.dump",
                                                          "output/average_position_high_temperature_over_dump.out")
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_high_temperature_over_dump.out"))
@@ -176,7 +176,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         # AFLOW Symmetry check
         self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
             reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
-        
+
         f1 = "output/lammps_high_temperature.log"
         f2 = "output/lammps_low_temperature.log"
         eps = temperature_offset_fraction * temperature
