@@ -85,6 +85,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "species": " ".join(species),
             "log_filename": "output/lammps_equilibration.log",
             "average_position_filename": "output/average_position_equilibration.dump.*",
+            "average_cell_filename": "output/average_cell_equilibration.dump",
             "write_restart_filename": "output/final_configuration_equilibration.restart"
         }
         # TODO: Possibly run MPI version of Lammps if available.
@@ -118,6 +119,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "species": " ".join(species),
             "log_filename": "output/lammps_high_temperature.log",
             "average_position_filename": "output/average_position_high_temperature.dump.*",
+            "average_cell_filename": "output/average_cell_high_temperature.dump",
             "read_restart_filename": "output/final_configuration_equilibration.restart"
         }
         # TODO: Possibly run MPI version of Lammps if available.
@@ -152,6 +154,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "species": " ".join(species),
             "log_filename": "output/lammps_low_temperature.log",
             "average_position_filename": "output/average_position_low_temperature.dump.*",
+            "average_cell_filename": "output/average_cell_low_temperature.dump",
             "read_restart_filename": "output/final_configuration_equilibration.restart"
         }
         command = (
