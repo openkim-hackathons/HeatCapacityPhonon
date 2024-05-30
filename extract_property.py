@@ -37,6 +37,33 @@ def extract_mean_error_from_logfile(filename:str, quantity:int):
     # Return
     return mean, error
 
+# Function to extract 
+def extract_equilibration_step_from_logfile(filename:str):
+    '''
+    Function to extract the equilibration step from logfile
+
+    @param filename : name of file
+    @return equil_step : the equilibration step
+    '''
+
+    # Get file content
+    with open(filename, 'r') as file:
+        data = file.read()
+
+    # Look for pattern
+    exterior_pattern = r'print "\${run_var}"\s*\{(.*?)\}\s*variable run_var delete'
+    mean_pattern = r'"equilibration_step"\s*([^ ]+)'
+    match_init = re.search(exterior_pattern, data, re.DOTALL)
+    equil_matches = re.findall(mean_pattern, match_init.group(), re.DOTALL)
+    if equil_matches is None:
+        raise ValueError('Mean not found')
+
+    # Get equilibration step
+    equil_step = int(equil_matches[0])
+
+    # Return
+    return equil_step
+
 # Function to compute heat capacity from MD
 def compute_heat_capacity(f1:str, f2:str, eps:float, quantity:int):
     '''
