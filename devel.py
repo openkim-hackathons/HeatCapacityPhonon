@@ -250,7 +250,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         return new_atoms
 
     @staticmethod
-    def _plot_property_from_lammps_log(in_file_path: str, property_names: Iterable[str]):
+    def _plot_property_from_lammps_log(in_file_path: str, property_names: Iterable[str]) -> None:
         '''
         The function to get the value of the property with time from ***.log 
         the extracted data are stored as ***.csv and ploted as property_name.png
@@ -293,6 +293,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             with open(out_file, "w") as f:
                 for l in table:
                     f.writelines(l)
+
         dir_name = os.path.dirname(in_file_path)
         in_file_name = os.path.basename(in_file_path)
         out_file_path = os.path.join(dir_name, in_file_name.replace(".log", ".csv"))
@@ -324,7 +325,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         data_dir-- the directory contains all the data e.g average_position.dump.* files
         '''
 
-        def get_id_pos_dict(file_name: str) -> dict:
+        def get_id_pos_dict(file_name):
             '''
             input: 
             file_name--the file_name that contains average postion data
@@ -416,7 +417,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         return [(line[1], line[2], line[3]) for line in lines]
 
     @staticmethod
-    def _get_cell_from_lammps_dump(filename: str) -> npt.NDArray[float]:
+    def _get_cell_from_lammps_dump(filename: str) -> npt.NDArray[np.float64]:
         new_cell = np.loadtxt(filename, skiprows=5, max_rows=3)
         assert new_cell.shape == (3, 2) or new_cell.shape == (3, 3)
 
