@@ -1,6 +1,3 @@
-# Set up logging.
-log ${log_filename}
-
 # Set the OpenKIM model and units that will be used.
 kim init ${modelname} metal unit_conversion_mode
 
@@ -80,8 +77,18 @@ dump avePosDump all custom 10000 ${average_position_filename} id f_avePos[1] f_a
 # Prevent dump at timestep 0.
 dump_modify avePosDump delay 10000
 
+# Average the cell information.
+variable lx_metal equal "v_xhi_metal - v_xlo_metal"
+variable ly_metal equal "v_yhi_metal - v_ylo_metal"
+variable lz_metal equal "v_zhi_metal - v_zlo_metal"
+fix aveCell all ave/time 1 10000 10000 v_lx_metal v_ly_metal v_lz_metal v_xy_metal v_xz_metal v_xz_metal file ${average_cell_filename}
+
 # Set up convergence check with kim-convergence.
 python run_length_control input 8 SELF 1 variable vol_metal variable temp_metal variable enthalpy_metal format pissssss file run_length_control.py
 
 # Run until converged.
 python run_length_control invoke
+
+# Run 10000 steps more in the converged regime. 
+# This makes sure that we have average fractional coordinates and cell information that were obtained entirely in equilibrium.
+run 10000
