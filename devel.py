@@ -484,5 +484,5 @@ if __name__ == "__main__":
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
     test_driver = HeatCapacityPhonon(model_name)
-    test_driver(bulk("Ar", "fcc", a=5.248), temperature = 1.0, pressure = 1.0, temperature_offset_fraction=0.01, 
-                timestep=0.001, number_sampling_timesteps=10, repeat=(5, 5, 5), loose_triclinic_and_monoclinic=False)
+    test_driver(bulk("Ar", "fcc", a=5.248), temperature = 10.0, pressure = 1.0, temperature_offset_fraction=0.01, 
+                timestep=0.001, number_sampling_timesteps=100, repeat=(7, 7, 7), loose_triclinic_and_monoclinic=False)
