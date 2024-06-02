@@ -171,6 +171,13 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_low_temperature_over_dump.out"))
         atoms_new.set_scaled_positions(
             self._get_positions_from_lammps_dump("output/average_position_low_temperature_over_dump.out"))
+        #*** here we try the new function _compute_average_positions_from_lammps_dump() and 
+        #*** _average_cell_over_steps(), feel free to remove these two lines 
+        self._compute_average_positions_from_lammps_dump("output", "average_position_low_temperature.dump",
+                                                         "output/average_position_low_temperature_over_dump_skip_30000.out",
+                                                         skip_steps = 30000)
+        property_value_dict = self._average_cell_over_steps("./output/average_cell_equilibration.dump")
+        
         # Reduce and average
         reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
         # AFLOW Symmetry check
@@ -316,13 +323,16 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             plt.close()
 
     @staticmethod
-    def _compute_average_positions_from_lammps_dump(data_dir: str, file_str: str, output_filename: str) -> None:
+    def _compute_average_positions_from_lammps_dump(data_dir: str, file_str: str, output_filename: str,skip_steps:int=0) -> None:
         '''
         This function compute the average position over *.dump files which contains the file_str in data_dir and output it
         to data_dir/[file_str]_over_dump.out
 
         input:
-        data_dir-- the directory contains all the data e.g average_position.dump.* files
+        data_dir -- the directory contains all the data e.g average_position.dump.* files
+        file_str -- the files whose names contain the file_str are considered
+        output_filename -- the name of the output file
+        skip_steps -- dump files with steps < skip_steps are ignored
         '''
 
         def get_id_pos_dict(file_name):
@@ -376,13 +386,15 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         max_step, last_step_file = -1, ""
         for file_name in os.listdir(data_dir):
             if file_str in file_name:
+                step = int(re.findall(r'\d+', file_name)[-1])
+                if step < skip_steps:
+                    continue
                 file_path = os.path.join(data_dir, file_name)
                 id_pos_dict = get_id_pos_dict(file_path)
                 id_pos = sorted(id_pos_dict.items())
                 id_list = [pair[0] for pair in id_pos]
                 pos_list.append([pair[1] for pair in id_pos])
                 # check if this is the last step
-                step = int(re.findall(r'\d+', file_name)[-1])
                 if step > max_step:
                     last_step_file, max_step = os.path.join(data_dir, file_name), step
         pos_arr = np.array(pos_list)
@@ -410,7 +422,27 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
                     f.write('{:3.6}'.format(avg_pos[i, dim]))
                     f.write("  ")
                 f.write("\n")
-
+    @staticmethod
+    def _average_cell_over_steps(input_file:str):
+    	'''
+    	average cell properties over time steps
+    	args:
+    	input_file: the input file e.g "./output/average_cell_low_temperature.dump"
+    	return:
+    	the dictionary contains the property_name and its averaged value
+    	e.g. {v_lx_metal:1.0,v_ly_metal:2.0 ...}
+    	'''
+    	with open(input_file,"r") as f:
+            f.readline() # skip the first line
+            header = f.readline()
+            header = header.replace("#","")
+    	property_names = header.split()
+    	data = np.loadtxt(input_file,skiprows=2)
+    	mean_data = data.mean(axis=0).tolist()
+    	property_dict = {property_names[i]:mean_data[i] for i in range(len(mean_data))}
+    	property_dict.pop("TimeStep") #timestep is not a cell property
+    	return property_dict
+        
     @staticmethod
     def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
         lines = sorted(np.loadtxt(filename, skiprows=9).tolist(), key=lambda x: x[0])
