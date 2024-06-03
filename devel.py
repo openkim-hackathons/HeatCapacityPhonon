@@ -323,7 +323,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             plt.close()
 
     @staticmethod
-    def _compute_average_positions_from_lammps_dump(data_dir: str, file_str: str, output_filename: str,skip_steps:int=0) -> None:
+    def _compute_average_positions_from_lammps_dump(data_dir: str, file_str: str, output_filename: str, skip_steps: int) -> None:
         '''
         This function compute the average position over *.dump files which contains the file_str in data_dir and output it
         to data_dir/[file_str]_over_dump.out
@@ -332,7 +332,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         data_dir -- the directory contains all the data e.g average_position.dump.* files
         file_str -- the files whose names contain the file_str are considered
         output_filename -- the name of the output file
-        skip_steps -- dump files with steps < skip_steps are ignored
+        skip_steps -- dump files with steps <= skip_steps are ignored
         '''
 
         def get_id_pos_dict(file_name):
@@ -387,7 +387,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         for file_name in os.listdir(data_dir):
             if file_str in file_name:
                 step = int(re.findall(r'\d+', file_name)[-1])
-                if step < skip_steps:
+                if step <= skip_steps:
                     continue
                 file_path = os.path.join(data_dir, file_name)
                 id_pos_dict = get_id_pos_dict(file_path)
@@ -397,6 +397,8 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
                 # check if this is the last step
                 if step > max_step:
                     last_step_file, max_step = os.path.join(data_dir, file_name), step
+        if max_step == -1 and last_step_file == "":
+            raise RuntimeError("Found no files to average over.")
         pos_arr = np.array(pos_list)
         avg_pos = np.mean(pos_arr, axis=0)
         # get the lines above the table from the file of the last step
@@ -422,27 +424,33 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
                     f.write('{:3.6}'.format(avg_pos[i, dim]))
                     f.write("  ")
                 f.write("\n")
+
     @staticmethod
-    def _average_cell_over_steps(input_file:str):
-    	'''
-    	average cell properties over time steps
-    	args:
-    	input_file: the input file e.g "./output/average_cell_low_temperature.dump"
-    	return:
-    	the dictionary contains the property_name and its averaged value
-    	e.g. {v_lx_metal:1.0,v_ly_metal:2.0 ...}
-    	'''
-    	with open(input_file,"r") as f:
-            f.readline() # skip the first line
+    def _average_cell_over_steps(input_file: str, skip_steps: int) -> List[float]:
+        '''
+        average cell properties over time steps
+        args:
+        input_file: the input file e.g "./output/average_cell_low_temperature.dump"
+        return:
+        the dictionary contains the property_name and its averaged value
+        e.g. {v_lx_metal:1.0,v_ly_metal:2.0 ...}
+        '''
+        with open(input_file, "r") as f:
+            f.readline()  # skip the first line
             header = f.readline()
-            header = header.replace("#","")
-    	property_names = header.split()
-    	data = np.loadtxt(input_file,skiprows=2)
-    	mean_data = data.mean(axis=0).tolist()
-    	property_dict = {property_names[i]:mean_data[i] for i in range(len(mean_data))}
-    	property_dict.pop("TimeStep") #timestep is not a cell property
-    	return property_dict
-        
+            header = header.replace("#", "")
+        property_names = header.split()
+        data = np.loadtxt(input_file, skiprows=2)
+        time_step_index = property_names.index("TimeStep")
+        time_step_data = data[:, time_step_index]
+        cutoff_index = np.argmax(time_step_data > skip_steps)
+        assert time_step_data[cutoff_index] > skip_steps
+        assert cutoff_index == 0 or time_step_data[cutoff_index - 1] <= skip_steps
+        mean_data = data[cutoff_index:].mean(axis=0).tolist()
+        property_dict = {property_names[i]: mean_data[i] for i in range(len(mean_data)) if property_names[i] != "TimeStep"}
+        return [property_dict["v_lx_metal"], property_dict["v_ly_metal"], property_dict["v_lz_metal"], 
+                property_dict["v_xy_metal"], property_dict["v_xz_metal"], property_dict["v_xz_metal"]]
+
     @staticmethod
     def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
         lines = sorted(np.loadtxt(filename, skiprows=9).tolist(), key=lambda x: x[0])
