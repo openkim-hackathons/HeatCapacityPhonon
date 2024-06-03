@@ -1,3 +1,4 @@
+from math import ceil
 import os
 import random
 import re
@@ -96,10 +97,15 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         subprocess.run(command, check=True, shell=True)
 
         # Analyse equilibration run.
+        equilibration_time = self._extract_equilibration_step_from_logfile("output/lammps_equilibration.log")
+        # Round to next multiple of 10000.
+        equilibration_time = int(ceil(equilibration_time / 10000.0)) * 10000
         self._plot_property_from_lammps_log("output/lammps_equilibration.log", ("v_vol_metal", "v_temp_metal"))
         self._compute_average_positions_from_lammps_dump("output", "average_position_equilibration.dump",
-                                                         "output/average_position_equilibration_over_dump.out")
-        atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_equilibration_over_dump.out"))
+                                                         "output/average_position_equilibration_over_dump.out",
+                                                         skip_steps=equilibration_time)
+        atoms_new.set_cell(self._get_cell(self._average_cell_over_steps("output/average_cell_equilibration.dump",
+                                                                        skip_steps=equilibration_time)))
         atoms_new.set_scaled_positions(
             self._get_positions_from_lammps_dump("output/average_position_equilibration_over_dump.out"))
         reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
@@ -130,18 +136,23 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         subprocess.run(command, check=True, shell=True)
 
         # Analyse high-temperature NPT run.
+        equilibration_time = self._extract_equilibration_step_from_logfile("output/lammps_high_temperature.log")
+        # Round to next multiple of 10000.
+        equilibration_time = int(ceil(equilibration_time / 10000.0)) * 10000
         self._plot_property_from_lammps_log("output/lammps_high_temperature.log",
                                             ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
         self._compute_average_positions_from_lammps_dump("output", "average_position_high_temperature.dump",
-                                                         "output/average_position_high_temperature_over_dump.out")
-        atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_high_temperature_over_dump.out"))
+                                                         "output/average_position_high_temperature_over_dump.out",
+                                                         skip_steps=equilibration_time)
+        atoms_new.set_cell(self._get_cell(self._average_cell_over_steps("output/average_cell_high_temperature.dump",
+                                                                        skip_steps=equilibration_time)))
         atoms_new.set_scaled_positions(
             self._get_positions_from_lammps_dump("output/average_position_high_temperature_over_dump.out"))
         reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
         # AFLOW Symmetry check
         self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
             reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
-
+        
         # Run second NPT simulation at lower temperature.
         variables = {
             "modelname": self.kim_model_name,
@@ -164,21 +175,18 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         subprocess.run(command, check=True, shell=True)
 
         # Analyse low-temperature NPT run.
+        equilibration_time = self._extract_equilibration_step_from_logfile("output/lammps_low_temperature.log")
+        # Round to next multiple of 10000.
+        equilibration_time = int(ceil(equilibration_time / 10000.0)) * 10000
         self._plot_property_from_lammps_log("output/lammps_low_temperature.log",
                                             ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
         self._compute_average_positions_from_lammps_dump("output", "average_position_low_temperature.dump",
-                                                         "output/average_position_low_temperature_over_dump.out")
-        atoms_new.set_cell(self._get_cell_from_lammps_dump("output/average_position_low_temperature_over_dump.out"))
+                                                         "output/average_position_low_temperature_over_dump.out",
+                                                         skip_steps=equilibration_time)
+        atoms_new.set_cell(self._get_cell(self._average_cell_over_steps("output/average_cell_low_temperature.dump",
+                                                                        skip_steps=equilibration_time)))
         atoms_new.set_scaled_positions(
             self._get_positions_from_lammps_dump("output/average_position_low_temperature_over_dump.out"))
-        #*** here we try the new function _compute_average_positions_from_lammps_dump() and 
-        #*** _average_cell_over_steps(), feel free to remove these two lines 
-        self._compute_average_positions_from_lammps_dump("output", "average_position_low_temperature.dump",
-                                                         "output/average_position_low_temperature_over_dump_skip_30000.out",
-                                                         skip_steps = 30000)
-        property_value_dict = self._average_cell_over_steps("./output/average_cell_equilibration.dump")
-        
-        # Reduce and average
         reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
         # AFLOW Symmetry check
         self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
@@ -455,41 +463,14 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
     def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
         lines = sorted(np.loadtxt(filename, skiprows=9).tolist(), key=lambda x: x[0])
         return [(line[1], line[2], line[3]) for line in lines]
-
+    
     @staticmethod
-    def _get_cell_from_lammps_dump(filename: str) -> npt.NDArray[np.float64]:
-        new_cell = np.loadtxt(filename, skiprows=5, max_rows=3)
-        assert new_cell.shape == (3, 2) or new_cell.shape == (3, 3)
-
-        # See https://docs.lammps.org/Howto_triclinic.html.
-        xlo_bound = new_cell[0, 0]
-        xhi_bound = new_cell[0, 1]
-        ylo_bound = new_cell[1, 0]
-        yhi_bound = new_cell[1, 1]
-        zlo_bound = new_cell[2, 0]
-        zhi_bound = new_cell[2, 1]
-
-        # If not cubic add more cell params
-        if new_cell.shape[-1] != 2:
-            xy = new_cell[0, 2]
-            xz = new_cell[1, 2]
-            yz = new_cell[2, 2]
-        else:
-            xy = 0.0
-            xz = 0.0
-            yz = 0.0
-
-        xlo = xlo_bound - min(0.0, xy, xz, xy + xz)
-        xhi = xhi_bound - max(0.0, xy, xz, xy + xz)
-        ylo = ylo_bound - min(0.0, yz)
-        yhi = yhi_bound - max(0.0, yz)
-        zlo = zlo_bound
-        zhi = zhi_bound
-
+    def _get_cell(cell_list: List[float]) -> npt.NDArray[np.float64]:
+        assert len(cell_list) == 6
         cell = np.empty(shape=(3, 3))
-        cell[0, :] = np.array([xhi - xlo, 0.0, 0.0])
-        cell[1, :] = np.array([xy, yhi - ylo, 0.0])
-        cell[2, :] = np.array([xz, yz, zhi - zlo])
+        cell[0, :] = np.array([cell_list[0], 0.0, 0.0])
+        cell[1, :] = np.array([cell_list[3], cell_list[1], 0.0])
+        cell[2, :] = np.array([cell_list[4], cell_list[5], cell_list[2]])
         return cell
 
     @staticmethod
@@ -551,6 +532,23 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         error = float(error_matches[quantity])
 
         return mean, error
+
+    @staticmethod
+    def _extract_equilibration_step_from_logfile(filename: str) -> int:
+        # Get file content
+        with open(filename, 'r') as file:
+            data = file.read()
+
+        # Look for pattern
+        exterior_pattern = r'print "\${run_var}"\s*\{(.*?)\}\s*variable run_var delete'
+        mean_pattern = r'"equilibration_step"\s*([^ ]+)'
+        match_init = re.search(exterior_pattern, data, re.DOTALL)
+        equil_matches = re.findall(mean_pattern, match_init.group(), re.DOTALL)
+        if equil_matches is None:
+            raise ValueError("Equilibration step not found")
+
+        # Return largest match
+        return max(int(equil) for equil in equil_matches)
 
 
 if __name__ == "__main__":
