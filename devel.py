@@ -449,7 +449,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         mean_data = data[cutoff_index:].mean(axis=0).tolist()
         property_dict = {property_names[i]: mean_data[i] for i in range(len(mean_data)) if property_names[i] != "TimeStep"}
         return [property_dict["v_lx_metal"], property_dict["v_ly_metal"], property_dict["v_lz_metal"], 
-                property_dict["v_xy_metal"], property_dict["v_xz_metal"], property_dict["v_xz_metal"]]
+                property_dict["v_xy_metal"], property_dict["v_xz_metal"], property_dict["v_yz_metal"]]
 
     @staticmethod
     def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
