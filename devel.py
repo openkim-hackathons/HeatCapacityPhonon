@@ -164,7 +164,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "lammps "
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
             + f" -log {log_filename}"
-            + " -in npt_equilibration.lammps")
+            + " -in npt.lammps")
         subprocess.run(command, check=True, shell=True)
 
         HeatCapacityPhonon._plot_property_from_lammps_log(
