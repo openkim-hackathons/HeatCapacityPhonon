@@ -17,7 +17,7 @@ MAX_RUN_LENGTH: int = 1000 * INITIAL_RUN_LENGTH
 # the maximum equilibration step.
 MAX_EQUILIBRATION_STEP: Optional[int] = 500 * INITIAL_RUN_LENGTH
 # Maximum number of independent samples.
-MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = 300
+MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = 1000
 # A relative half-width requirement or the accuracy parameter. Target value
 # for the ratio of halfwidth to sample mean. If n_variables > 1,
 # relative_accuracy can be a scalar to be used for all variables or a 1darray

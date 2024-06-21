@@ -1,18 +1,39 @@
 # Set the OpenKIM model and units that will be used.
 kim init ${modelname} metal unit_conversion_mode
 
+# Periodic boundary conditions along all three dimensions.
+boundary p p p
+
 # Explicitly include neighbor list command so that it can be changed conveniently.
 neigh_modify delay 0 every 1 check yes one 2000
 
-# Read restart file from previous equilibration simulation.
-read_restart ${read_restart_filename}
+# Read initial zero-temperature crystal.
+read_data output/zero_temperature_crystal.lmp
+
+# Change to triclinic box.
+change_box all triclinic
+
+# Convert box and all atomic positions to the correct units.
+change_box all x scale ${_u_distance} &
+               y scale ${_u_distance} &
+               z scale ${_u_distance} &
+               xy final $(xy*v__u_distance) &
+               xz final $(xz*v__u_distance) &
+               yz final $(yz*v__u_distance) &
+               remap
 
 # Interatomic potential and neighbor settings
 kim interactions ${species}
 
-# Sample heat capacity in NVT ensemble.
+# Sample initial velocities.
+velocity all create $(v_temperature*v__u_temperature) ${temperature_seed}
+
+# Equilibrate and sample in NPT ensemble.
 fix NPT all npt temp $(v_temperature*v__u_temperature) $(v_temperature*v__u_temperature) $(v_temperature_damping*v__u_time) &
                 tri $(v_pressure*v__u_pressure) $(v_pressure*v__u_pressure) $(v_pressure_damping*v__u_time)
+
+# Set timestep.
+timestep $(v_timestep*v__u_time)
 
 # Compute ke so that we can use it in a variable.
 compute thermo_ke all ke
@@ -83,6 +104,11 @@ variable ly_metal equal "v_yhi_metal - v_ylo_metal"
 variable lz_metal equal "v_zhi_metal - v_zlo_metal"
 fix aveCell all ave/time 1 10000 10000 v_lx_metal v_ly_metal v_lz_metal v_xy_metal v_xz_metal v_yz_metal file ${average_cell_filename}
 
+# Temperature may be off because of rigid bodies or SHAKE constraints.
+# See https://docs.lammps.org/velocity.html
+run 0
+velocity all scale $(v_temperature*v__u_temperature)
+
 # Set up convergence check with kim-convergence.
 python run_length_control input 8 SELF 1 variable vol_metal variable temp_metal variable enthalpy_metal format pissssss file run_length_control.py
 
@@ -92,3 +118,14 @@ python run_length_control invoke
 # Run 10000 steps more in the converged regime. 
 # This makes sure that we have average fractional coordinates and cell information that were obtained entirely in equilibrium.
 run 10000
+
+# Reset.
+unfix NPT
+unfix avePos
+unfix aveCell
+unfix cr_fix  # From run_length_control.py
+undump avePosDump
+reset_timestep 0
+
+# Write the initial starting file for a true simulation.
+write_restart ${write_restart_filename}

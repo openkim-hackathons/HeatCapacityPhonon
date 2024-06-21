@@ -1,21 +1,25 @@
-from math import ceil
+from concurrent.futures import as_completed, ProcessPoolExecutor
+from math import ceil, sqrt
 import os
 import random
 import re
 import subprocess
-from typing import Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 from ase import Atoms
 from ase.build import bulk
+import findiff
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+import scipy.optimize
 from kim_test_utils.test_driver import CrystalGenomeTestDriver
 
 
 class HeatCapacityPhonon(CrystalGenomeTestDriver):
-    def _calculate(self, temperature: float, pressure: float, temperature_offset_fraction: float,
-                   timestep: float, number_sampling_timesteps: int, repeat: Tuple[int, int, int] = (3, 3, 3),
-                   seed: Optional[int] = None, loose_triclinic_and_monoclinic=False, **kwargs) -> None:
+    def _calculate(self, temperature: float, pressure: float, temperature_step_fraction: float,
+                   number_symmetric_temperature_steps: int, timestep: float, number_sampling_timesteps: int,
+                   repeat: Tuple[int, int, int] = (3, 3, 3), loose_triclinic_and_monoclinic=False,
+                   max_workers: Optional[int] = None, **kwargs) -> None:
         """
         Compute constant-pressure heat capacity from centered finite difference (see Section 3.2 in
         https://pubs.acs.org/doi/10.1021/jp909762j).
@@ -41,6 +45,12 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         if not pressure > 0.0:
             raise RuntimeError("Pressure has to be larger than zero.")
 
+        if not number_symmetric_temperature_steps > 0:
+            raise RuntimeError("Number of symmetric temperature steps has to be bigger than zero.")
+
+        if number_symmetric_temperature_steps * temperature_step_fraction >= 1.0:
+            raise RuntimeError("The given number of symmetric temperature steps and the given temperature-step fraction "
+                               "would yield zero or negative temperatures.")
         # TODO: Check all arguments.
 
         # Copy original atoms so that their information does not get lost when the new atoms are modified.
@@ -63,19 +73,80 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
         atoms_new.write(structure_file, format="lammps-data", masses=True)
 
-        # Get random 31-bit unsigned integer.
-        # TODO: Add seed to property.
-        if seed is None:
-            seed = random.getrandbits(31)
+        # Get temperatures that should be simulated.
+        temperature_step = temperature_step_fraction * temperature
+        temperatures = [temperature + i * temperature_step
+                        for i in range(-number_symmetric_temperature_steps, number_symmetric_temperature_steps + 1)]
+        assert len(temperatures) == 2 * number_symmetric_temperature_steps + 1
+        assert all(t > 0.0 for t in temperatures)
 
-        # TODO: Move damping factors to argument.
+        # Run Lammps simulations in parallel.
+        futures = []
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            for i, t in enumerate(temperatures):
+                futures.append(executor.submit(
+                    HeatCapacityPhonon._run_lammps, self.kim_model_name, i, t, pressure, timestep,
+                    number_sampling_timesteps, species))
+
+        # If one simulation fails, cancel all runs.
+        for future in as_completed(futures):
+            assert future.done()
+            exception = future.exception()
+            if exception is not None:
+                for f in futures:
+                    f.cancel()
+                raise exception
+
+        # Collect results and check that symmetry is unchanged after all simulations.
+        log_filenames = []
+        restart_filenames = []
+        for future, t in zip(futures, temperatures):
+            assert future.done()
+            assert future.exception() is None
+            log_filename, restart_filename, average_position_filename, average_cell_filename = future.result()
+            log_filenames.append(log_filename)
+            restart_filenames.append(restart_filename)
+            restart_filenames.append(restart_filename)
+            atoms_new.set_cell(self._get_cell_from_averaged_lammps_dump(average_cell_filename))
+            atoms_new.set_scaled_positions(
+                self._get_positions_from_averaged_lammps_dump(average_position_filename))
+            reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
+            self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
+                reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
+
+        c = self._compute_heat_capacity(temperatures, log_filenames, 2)
+
+        # Print result.
+        print('####################################')
+        print('# NPT Heat Capacity Results #')
+        print('####################################')
+        print(f'C_p:\t{c}')
+
+        # I have to do this or KIM tries to save some coordinate file.
+        self.poscar = None
+
+        # Write property.
+        self._add_property_instance_and_common_crystal_genome_keys(
+            "heat-capacity-phonon-npt", write_stress=True, write_temp=True)  # last two default to False
+        self._add_key_to_current_property_instance(
+            "constant_pressure_heat_capacity", c["finite_difference_accuracy_2"][0], "eV/Kelvin")
+        self._add_key_to_current_property_instance(
+            "constant_pressure_heat_capacity_err", c["finite_difference_accuracy_2"][1], "eV/Kelvin")
+        self._add_key_to_current_property_instance("pressure", pressure, "bars")
+
+    @staticmethod
+    def _run_lammps(modelname: str, temperature_index: int, temperature: float, pressure: float, timestep: float,
+                    number_sampling_timesteps: int, species: List[str]) -> Tuple[str, str, str, str]:
+        # Get random 31-bit unsigned integer.
+        seed = random.getrandbits(31)
+
         pdamp = timestep * 100.0
         tdamp = timestep * 1000.0
 
-        # Run NPT simulation for equilibration.
-        # TODO: If we notice that this takes too long, maybe use an initial temperature ramp.
+        log_filename = f"output/lammps_temperature_{temperature_index}.log"
+        restart_filename = f"output/final_configuration_temperature_{temperature_index}.restart"
         variables = {
-            "modelname": self.kim_model_name,
+            "modelname": modelname,
             "temperature": temperature,
             "temperature_seed": seed,
             "temperature_damping": tdamp,
@@ -84,135 +155,36 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             "timestep": timestep,
             "number_sampling_timesteps": number_sampling_timesteps,
             "species": " ".join(species),
-            "average_position_filename": "output/average_position_equilibration.dump.*",
-            "average_cell_filename": "output/average_cell_equilibration.dump",
-            "write_restart_filename": "output/final_configuration_equilibration.restart"
+            "average_position_filename": f"output/average_position_temperature_{temperature_index}.dump.*",
+            "average_cell_filename": f"output/average_cell_temperature_{temperature_index}.dump",
+            "write_restart_filename": restart_filename
         }
-        # TODO: Possibly run MPI version of Lammps if available.
+
         command = (
             "lammps "
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
-            + " -log output/lammps_equilibration.log"
+            + f" -log {log_filename}"
             + " -in npt_equilibration.lammps")
         subprocess.run(command, check=True, shell=True)
 
-        # Analyse equilibration run.
-        equilibration_time = self._extract_equilibration_step_from_logfile("output/lammps_equilibration.log")
+        HeatCapacityPhonon._plot_property_from_lammps_log(
+            log_filename, ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
+
+        equilibration_time = HeatCapacityPhonon._extract_equilibration_step_from_logfile(log_filename)
         # Round to next multiple of 10000.
         equilibration_time = int(ceil(equilibration_time / 10000.0)) * 10000
-        self._plot_property_from_lammps_log("output/lammps_equilibration.log", ("v_vol_metal", "v_temp_metal"))
-        self._compute_average_positions_from_lammps_dump("output", "average_position_equilibration.dump",
-                                                         "output/average_position_equilibration_over_dump.out",
-                                                         skip_steps=equilibration_time)
-        atoms_new.set_cell(self._get_cell(self._average_cell_over_steps("output/average_cell_equilibration.dump",
-                                                                        skip_steps=equilibration_time)))
-        atoms_new.set_scaled_positions(
-            self._get_positions_from_lammps_dump("output/average_position_equilibration_over_dump.out"))
-        reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
-        # AFLOW Symmetry check
-        self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
-            reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
 
-        # Run first NPT simulation at higher temperature.
-        variables = {
-            "modelname": self.kim_model_name,
-            "temperature": (1 + temperature_offset_fraction) * temperature,
-            "temperature_damping": tdamp,
-            "pressure": pressure,
-            "pressure_damping": pdamp,
-            "timestep": timestep,
-            "number_sampling_timesteps": number_sampling_timesteps,
-            "species": " ".join(species),
-            "average_position_filename": "output/average_position_high_temperature.dump.*",
-            "average_cell_filename": "output/average_cell_high_temperature.dump",
-            "read_restart_filename": "output/final_configuration_equilibration.restart"
-        }
-        # TODO: Possibly run MPI version of Lammps if available.
-        command = (
-            "lammps "
-            + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
-            + " -log output/lammps_high_temperature.log"
-            + " -in npt_heat_capacity.lammps")
-        subprocess.run(command, check=True, shell=True)
+        full_average_position_file = f"output/average_position_temperature_{temperature_index}.dump.full"
+        HeatCapacityPhonon._compute_average_positions_from_lammps_dump(
+            "output", f"average_position_temperature_{temperature_index}.dump",
+            full_average_position_file, equilibration_time)
 
-        # Analyse high-temperature NPT run.
-        equilibration_time = self._extract_equilibration_step_from_logfile("output/lammps_high_temperature.log")
-        # Round to next multiple of 10000.
-        equilibration_time = int(ceil(equilibration_time / 10000.0)) * 10000
-        self._plot_property_from_lammps_log("output/lammps_high_temperature.log",
-                                            ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
-        self._compute_average_positions_from_lammps_dump("output", "average_position_high_temperature.dump",
-                                                         "output/average_position_high_temperature_over_dump.out",
-                                                         skip_steps=equilibration_time)
-        atoms_new.set_cell(self._get_cell(self._average_cell_over_steps("output/average_cell_high_temperature.dump",
-                                                                        skip_steps=equilibration_time)))
-        atoms_new.set_scaled_positions(
-            self._get_positions_from_lammps_dump("output/average_position_high_temperature_over_dump.out"))
-        reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
-        # AFLOW Symmetry check
-        self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
-            reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
-        
-        # Run second NPT simulation at lower temperature.
-        variables = {
-            "modelname": self.kim_model_name,
-            "temperature": (1 - temperature_offset_fraction) * temperature,
-            "temperature_damping": tdamp,
-            "pressure": pressure,
-            "pressure_damping": pdamp,
-            "timestep": timestep,
-            "number_sampling_timesteps": number_sampling_timesteps,
-            "species": " ".join(species),
-            "average_position_filename": "output/average_position_low_temperature.dump.*",
-            "average_cell_filename": "output/average_cell_low_temperature.dump",
-            "read_restart_filename": "output/final_configuration_equilibration.restart"
-        }
-        command = (
-            "lammps "
-            + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
-            + " -log output/lammps_low_temperature.log"
-            + " -in npt_heat_capacity.lammps")
-        subprocess.run(command, check=True, shell=True)
+        full_average_cell_file = f"output/average_cell_temperature_{temperature_index}.dump.full"
+        HeatCapacityPhonon._compute_average_cell_from_lammps_dump(
+            f"output/average_cell_temperature_{temperature_index}.dump", full_average_cell_file,
+            equilibration_time)
 
-        # Analyse low-temperature NPT run.
-        equilibration_time = self._extract_equilibration_step_from_logfile("output/lammps_low_temperature.log")
-        # Round to next multiple of 10000.
-        equilibration_time = int(ceil(equilibration_time / 10000.0)) * 10000
-        self._plot_property_from_lammps_log("output/lammps_low_temperature.log",
-                                            ("v_vol_metal", "v_temp_metal", "v_enthalpy_metal"))
-        self._compute_average_positions_from_lammps_dump("output", "average_position_low_temperature.dump",
-                                                         "output/average_position_low_temperature_over_dump.out",
-                                                         skip_steps=equilibration_time)
-        atoms_new.set_cell(self._get_cell(self._average_cell_over_steps("output/average_cell_low_temperature.dump",
-                                                                        skip_steps=equilibration_time)))
-        atoms_new.set_scaled_positions(
-            self._get_positions_from_lammps_dump("output/average_position_low_temperature_over_dump.out"))
-        reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
-        # AFLOW Symmetry check
-        self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
-            reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
-
-        f1 = "output/lammps_high_temperature.log"
-        f2 = "output/lammps_low_temperature.log"
-        eps = temperature_offset_fraction * temperature
-        c, c_err = self._compute_heat_capacity(f1, f2, eps, 2)
-
-        # Print Result
-        print('####################################')
-        print('# NPT Phonon Heat Capacity Results #')
-        print('####################################')
-        print(f'C_p:\t{c}')
-        print(f'C_p Error:\t{c_err}')
-
-        # I have to do this or KIM tries to save some coordinate file
-        self.poscar = None
-
-        # Write property
-        self._add_property_instance_and_common_crystal_genome_keys(
-            "heat-capacity-phonon-npt", write_stress=True, write_temp=True)  # last two default to False
-        self._add_key_to_current_property_instance("constant_pressure_heat_capacity", c, "eV/Kelvin")
-        self._add_key_to_current_property_instance("constant_pressure_heat_capacity_err", c_err, "eV/Kelvin")
-        self._add_key_to_current_property_instance("pressure", variables['pressure'], "bars")
+        return log_filename, restart_filename, full_average_position_file, full_average_cell_file
 
     @staticmethod
     def _reduce_and_avg(atoms: Atoms, repeat: Tuple[int, int, int]) -> Atoms:
@@ -274,7 +246,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         '''
         def get_table(in_file):
             if not os.path.isfile(in_file):
-                raise FileNotFoundError(in_file + "not found")
+                raise FileNotFoundError(in_file + " not found")
             elif not ".log" in in_file:
                 raise FileNotFoundError("The file is not a *.log file")
             is_first_header = True
@@ -283,7 +255,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             table = []
             with open(in_file, "r") as f:
                 line = f.readline()
-                while line:  # not EOF
+                while line:  # Not EOF.
                     is_header = True
                     for _s in header_flags:
                         is_header = is_header and (_s in line)
@@ -373,7 +345,6 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
                         count_content_line += 1
                         words = line.split()
                         id = int(words[0])
-                        # pos = np.array([float(words[2]),float(words[3]),float(words[4])])
                         pos = np.array([float(words[1]), float(words[2]), float(words[3])])
                         id_pos_dict[id] = pos
                     if count_content_line > 0 and count_content_line >= N:
@@ -389,7 +360,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         if not ".dump" in file_str:
             raise ValueError("file_str must be a string containing .dump")
 
-        # extract and store all the data
+        # Extract and store all the data.
         pos_list = []
         max_step, last_step_file = -1, ""
         for file_name in os.listdir(data_dir):
@@ -402,14 +373,14 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
                 id_pos = sorted(id_pos_dict.items())
                 id_list = [pair[0] for pair in id_pos]
                 pos_list.append([pair[1] for pair in id_pos])
-                # check if this is the last step
+                # Check if this is the last step.
                 if step > max_step:
                     last_step_file, max_step = os.path.join(data_dir, file_name), step
         if max_step == -1 and last_step_file == "":
             raise RuntimeError("Found no files to average over.")
         pos_arr = np.array(pos_list)
         avg_pos = np.mean(pos_arr, axis=0)
-        # get the lines above the table from the file of the last step
+        # Get the lines above the table from the file of the last step.
         with open(last_step_file, "r") as f:
             header4pos = ["id", "f_avePos[1]", "f_avePos[2]", "f_avePos[3]"]
             line = f.readline()
@@ -422,7 +393,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
                     break
                 else:
                     line = f.readline()
-        # Write the output to the file
+        # Write the output to the file.
         with open(output_filename, "w") as f:
             f.write(description_str)
             for i in range(len(id_list)):
@@ -434,17 +405,9 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
                 f.write("\n")
 
     @staticmethod
-    def _average_cell_over_steps(input_file: str, skip_steps: int) -> List[float]:
-        '''
-        average cell properties over time steps
-        args:
-        input_file: the input file e.g "./output/average_cell_low_temperature.dump"
-        return:
-        the dictionary contains the property_name and its averaged value
-        e.g. {v_lx_metal:1.0,v_ly_metal:2.0 ...}
-        '''
+    def _compute_average_cell_from_lammps_dump(input_file: str, output_file: str, skip_steps: int) -> None:
         with open(input_file, "r") as f:
-            f.readline()  # skip the first line
+            f.readline()  # Skip the first line.
             header = f.readline()
             header = header.replace("#", "")
         property_names = header.split()
@@ -455,17 +418,19 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         assert time_step_data[cutoff_index] > skip_steps
         assert cutoff_index == 0 or time_step_data[cutoff_index - 1] <= skip_steps
         mean_data = data[cutoff_index:].mean(axis=0).tolist()
-        property_dict = {property_names[i]: mean_data[i] for i in range(len(mean_data)) if property_names[i] != "TimeStep"}
-        return [property_dict["v_lx_metal"], property_dict["v_ly_metal"], property_dict["v_lz_metal"], 
-                property_dict["v_xy_metal"], property_dict["v_xz_metal"], property_dict["v_yz_metal"]]
+        with open(output_file, "w") as f:
+            print("# Full time-averaged data for cell information", file=f)
+            print(f"# {' '.join(name for name in property_names if name != 'TimeStep')}", file=f)
+            print(" ".join(str(mean_data[i]) for i, name in enumerate(property_names) if name != "TimeStep"), file=f)
 
     @staticmethod
-    def _get_positions_from_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
+    def _get_positions_from_averaged_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
         lines = sorted(np.loadtxt(filename, skiprows=9).tolist(), key=lambda x: x[0])
         return [(line[1], line[2], line[3]) for line in lines]
-    
+
     @staticmethod
-    def _get_cell(cell_list: List[float]) -> npt.NDArray[np.float64]:
+    def _get_cell_from_averaged_lammps_dump(filename: str) -> npt.NDArray[np.float64]:
+        cell_list = np.loadtxt(filename, comments='#')
         assert len(cell_list) == 6
         cell = np.empty(shape=(3, 3))
         cell[0, :] = np.array([cell_list[0], 0.0, 0.0])
@@ -474,31 +439,57 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         return cell
 
     @staticmethod
-    def _compute_heat_capacity(f1: str, f2: str, eps: float, quantity: int) -> Tuple[float, float]:
-        """
-        Function to compute heat capacity by finite difference from two simulations
+    def _compute_heat_capacity(temperatures: List[float], log_filenames: List[str],
+                               quantity_index: int) -> Dict[str, Tuple[float, float]]:
+        enthalpy_means = []
+        enthalpy_errs = []
+        for log_filename in log_filenames:
+            enthalpy_mean, enthalpy_conf = HeatCapacityPhonon._extract_mean_error_from_logfile(
+                log_filename, quantity_index)
+            enthalpy_means.append(enthalpy_mean)
+            # Correct 95% confidence interval to standard error.
+            enthalpy_errs.append(enthalpy_conf / 1.96)
 
-        @param f1 : filename of first file
-        @param f2 : filename of second file
-        @param eps : epsilon
-        @param quantity : number quantity in the log file
-        @return c : heat capacity
-        @return err : the error in the reported value
-        """
+        # Use finite differences to estimate derivative.
+        temperature_step = temperatures[1] - temperatures[0]
+        assert all(abs(temperatures[i+1] - temperatures[i] - temperature_step)
+                   < 1.0e-12 for i in range(len(temperatures) - 1))
+        assert len(temperatures) >= 3
+        max_accuracy = len(temperatures) - 1
+        heat_capacity = {}
+        for accuracy in range(2, max_accuracy + 1, 2):
+            heat_capacity[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                temperature_step, enthalpy_means, enthalpy_errs, accuracy)
 
-        # Extract mean values
-        H_plus_mean, H_plus_err = HeatCapacityPhonon._extract_mean_error_from_logfile(f1, quantity)
-        H_minus_mean, H_minus_err = HeatCapacityPhonon._extract_mean_error_from_logfile(f2, quantity)
+        # Use linear fit to estimate derivative.
+        heat_capacity["fit"] = HeatCapacityPhonon._get_slope_and_error(
+            temperatures, enthalpy_means, enthalpy_errs)
 
-        # Compute heat capacity
-        c = (H_plus_mean - H_minus_mean) / (2 * eps)
+        return heat_capacity
 
-        # Error computation
-        dx = H_plus_err
-        dy = H_minus_err
-        c_err = np.sqrt(((dx / (2 * eps)) ** 2) + ((dy / (2 * eps)) ** 2))
-        # Return
-        return c, c_err
+    @staticmethod
+    def _get_slope_and_error(x_values: List[float], y_values: List[float], y_errs: List[float]):
+        popt, pcov = scipy.optimize.curve_fit(lambda x, m, b: m * x + b, x_values, y_values,
+                                              sigma=y_errs, absolute_sigma=True)
+        perr = np.sqrt(np.diag(pcov))
+        return popt[0], perr[0]
+
+    @staticmethod
+    def _get_center_finite_difference_and_error(diff_x: float, y_values: List[float], y_errs: List[float], accuracy: int):
+        assert len(y_values) == len(y_errs)
+        assert len(y_values) > accuracy
+        assert len(y_values) % 2 == 1
+        center_index = len(y_values) // 2
+        coefficients = findiff.coefficients(deriv=1, acc=accuracy)["center"]["coefficients"]
+        offsets = findiff.coefficients(deriv=1, acc=accuracy)["center"]["offsets"]
+        finite_difference = 0.0
+        finite_difference_error_squared = 0.0
+        for coefficient, offset in zip(coefficients, offsets):
+            finite_difference += coefficient * y_values[center_index + offset]
+            finite_difference_error_squared += (coefficient * y_errs[center_index + offset]) ** 2
+        finite_difference /= diff_x
+        finite_difference_error_squared /= (diff_x * diff_x)
+        return finite_difference, sqrt(finite_difference_error_squared)
 
     @staticmethod
     def _extract_mean_error_from_logfile(filename: str, quantity: int) -> Tuple[float, float]:
@@ -510,11 +501,11 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         @return mean : reported mean value
         """
 
-        # Get content
+        # Get content.
         with open(filename, "r") as file:
             data = file.read()
 
-        # Look for print pattern
+        # Look for print pattern.
         exterior_pattern = r'print "\${run_var}"\s*\{(.*?)\}\s*variable run_var delete'
         mean_pattern = r'"mean"\s*([^ ]+)'
         error_pattern = r'"upper_confidence_limit"\s*([^ ]+)'
@@ -526,7 +517,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         if error_matches is None:
             raise ValueError("Error not found")
 
-        # Get correct match
+        # Get correct match.
         mean = float(mean_matches[quantity])
         error = float(error_matches[quantity])
 
@@ -534,11 +525,11 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
 
     @staticmethod
     def _extract_equilibration_step_from_logfile(filename: str) -> int:
-        # Get file content
+        # Get file content.
         with open(filename, 'r') as file:
             data = file.read()
 
-        # Look for pattern
+        # Look for pattern.
         exterior_pattern = r'print "\${run_var}"\s*\{(.*?)\}\s*variable run_var delete'
         mean_pattern = r'"equilibration_step"\s*([^ ]+)'
         match_init = re.search(exterior_pattern, data, re.DOTALL)
@@ -546,7 +537,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         if equil_matches is None:
             raise ValueError("Equilibration step not found")
 
-        # Return largest match
+        # Return largest match.
         return max(int(equil) for equil in equil_matches)
 
 
@@ -554,5 +545,6 @@ if __name__ == "__main__":
     model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
     test_driver = HeatCapacityPhonon(model_name)
-    test_driver(bulk("Ar", "fcc", a=5.248), temperature=10.0, pressure=1.0, temperature_offset_fraction=0.01,
-                timestep=0.001, number_sampling_timesteps=100, repeat=(7, 7, 7), loose_triclinic_and_monoclinic=False)
+    test_driver(bulk("Ar", "fcc", a=5.248), temperature=10.0, pressure=1.0, temperature_step_fraction=0.01,
+                number_symmetric_temperature_steps=2, timestep=0.001, number_sampling_timesteps=100,
+                repeat=(7, 7, 7), loose_triclinic_and_monoclinic=False, max_workers=5)
