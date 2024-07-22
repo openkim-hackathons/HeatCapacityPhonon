@@ -7,12 +7,15 @@ import subprocess
 from typing import Dict, Iterable, List, Optional, Tuple
 from ase import Atoms
 from ase.build import bulk
+from ase.io.lammpsdata import write_lammps_data
 import findiff
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import scipy.optimize
-from kim_test_utils.test_driver import CrystalGenomeTestDriver
+import copy
+from kim_tools.test_driver import CrystalGenomeTestDriver
+from kim_tools import query_crystal_genome_structures
 
 
 class HeatCapacityPhonon(CrystalGenomeTestDriver):
@@ -68,11 +71,6 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         # Build supercell.
         atoms_new = atoms_new.repeat(repeat)
 
-        # Write lammps file.
-        TDdirectory = os.path.dirname(os.path.realpath(__file__))
-        structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
-        atoms_new.write(structure_file, format="lammps-data", masses=True)
-
         # Get temperatures that should be simulated.
         temperature_step = temperature_step_fraction * temperature
         temperatures = [temperature + i * temperature_step
@@ -80,6 +78,10 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         assert len(temperatures) == 2 * number_symmetric_temperature_steps + 1
         assert all(t > 0.0 for t in temperatures)
 
+        # Write lammps file, handle cases where some models require "charge" formatted structure files
+        TDdirectory = os.path.dirname(os.path.realpath(__file__))
+        structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
+        atoms_new.write(structure_file, format="lammps-data", masses=True)
         # Run Lammps simulations in parallel.
         futures = []
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -95,11 +97,46 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             if exception is not None:
                 for f in futures:
                     f.cancel()
-                raise exception
+
+                # detect if the simulation failed because the structure file
+                # was written in the wrong format, and if so handle it
+                # otherwise raise the exception
+                wrong_format_error=False
+                for t in range(len(temperatures)):
+                    filename="output/lammps_temperature_"+str(t)+".log"
+                    log_file=os.path.join(TDdirectory,filename)
+                    
+                    wrong_format_error=self._check_lammps_log_for_wrong_structure_format(log_file)
+
+                if wrong_format_error:
+                    # write the atom configuration file in the in the 'charge' format some models expect
+                    write_lammps_data(structure_file,atoms_new,atom_style="charge",masses=True)
+
+                    # Run Lammps simulations in parallel.
+                    futures = []
+                    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                        for i, t in enumerate(temperatures):
+                            futures.append(executor.submit(
+                                HeatCapacityPhonon._run_lammps, self.kim_model_name, i, t, pressure, timestep,
+                                number_sampling_timesteps, species))
+
+                    # If one simulation fails, cancel all runs.
+                    for future in as_completed(futures):
+                        assert future.done()
+                        exception = future.exception()
+                        if exception is not None:
+                            for f in futures:
+                                f.cancel()
+                            raise exception
+                
+                else:
+                    raise exception
+        
 
         # Collect results and check that symmetry is unchanged after all simulations.
         log_filenames = []
         restart_filenames = []
+        cell_params=[]
         for future, t in zip(futures, temperatures):
             assert future.done()
             assert future.exception() is None
@@ -110,12 +147,15 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             atoms_new.set_cell(self._get_cell_from_averaged_lammps_dump(average_cell_filename))
             atoms_new.set_scaled_positions(
                 self._get_positions_from_averaged_lammps_dump(average_position_filename))
+            cell_param = [self._get_cell_parameters_and_errors_from_averaged_lammps_dump(average_cell_filename)]
+            cell_params.append(cell_param)
             reduced_atoms = self._reduce_and_avg(atoms_new, repeat)
-            self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
+            crystal_genome_designation = self._get_crystal_genome_designation_from_atoms_and_verify_unchanged_symmetry(
                 reduced_atoms, loose_triclinic_and_monoclinic=loose_triclinic_and_monoclinic)
 
         c = self._compute_heat_capacity(temperatures, log_filenames, 2)
 
+        alpha = self._compute_alpha(cell_params,temperatures,crystal_genome_designation["prototype_label"])
         # Print result.
         print('####################################')
         print('# NPT Heat Capacity Results #')
@@ -133,6 +173,60 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         self._add_key_to_current_property_instance(
             "constant_pressure_heat_capacity_err", c["finite_difference_accuracy_2"][1], "eV/Kelvin")
         self._add_key_to_current_property_instance("pressure", pressure, "bars")
+
+        max_accuracy = len(temperatures) - 1
+        # TODO: simplify parsing these out
+        alpha11=alpha[0][0][f"finite_difference_accuracy_{max_accuracy}"][0]
+        alpha11_err=alpha[0][0][f"finite_difference_accuracy_{max_accuracy}"][1]
+        alpha12=alpha[0][1][f"finite_difference_accuracy_{max_accuracy}"][0]
+        alpha12_err=alpha[0][1][f"finite_difference_accuracy_{max_accuracy}"][1]
+        alpha13=alpha[0][2][f"finite_difference_accuracy_{max_accuracy}"][0]
+        alpha13_err=alpha[0][2][f"finite_difference_accuracy_{max_accuracy}"][1]
+        alpha22=alpha[1][1][f"finite_difference_accuracy_{max_accuracy}"][0]
+        alpha22_err=alpha[1][1][f"finite_difference_accuracy_{max_accuracy}"][1]
+        alpha23=alpha[1][2][f"finite_difference_accuracy_{max_accuracy}"][0]
+        alpha23_err=alpha[1][2][f"finite_difference_accuracy_{max_accuracy}"][1]
+        alpha33=alpha[2][2][f"finite_difference_accuracy_{max_accuracy}"][0]
+        alpha33_err=alpha[2][2][f"finite_difference_accuracy_{max_accuracy}"][1]
+
+        # enforce tensor symmetries
+        alpha21=alpha12
+        alpha31=alpha13
+        alpha32=alpha23
+
+        alpha21_err=alpha12_err
+        alpha31_err=alpha13_err
+        alpha32_err=alpha23_err
+
+
+        alpha_final=np.asarray([[alpha11,alpha12,alpha13],
+                          [alpha21,alpha22,alpha23],
+                          [alpha31,alpha32,alpha33]])
+        
+        alpha_final_err=np.asarray([[alpha11_err,alpha12_err,alpha13_err],
+                          [alpha21_err,alpha22_err,alpha23_err],
+                          [alpha31_err,alpha32_err,alpha33_err]])
+
+        self._add_property_instance_and_common_crystal_genome_keys("thermal-expansion-coefficient-npt",write_stress=True, write_temp=True)
+        self._add_key_to_current_property_instance("alpha11",alpha11,"1/K")
+        self._add_key_to_current_property_instance("alpha22",alpha22,"1/K")
+        self._add_key_to_current_property_instance("alpha33",alpha33,"1/K")
+        self._add_key_to_current_property_instance("alpha12",alpha12,"1/K")
+        self._add_key_to_current_property_instance("alpha13",alpha13,"1/K")
+        self._add_key_to_current_property_instance("alpha23",alpha23,"1/K")
+        self._add_key_to_current_property_instance("thermal-expansion-coefficient",alpha_final,"1/K")
+
+        self._add_key_to_current_property_instance("alpha11_err",alpha11_err,"1/K")
+        self._add_key_to_current_property_instance("alpha22_err",alpha22_err,"1/K")
+        self._add_key_to_current_property_instance("alpha33_err",alpha33_err,"1/K")
+        self._add_key_to_current_property_instance("alpha12_err",alpha12_err,"1/K")
+        self._add_key_to_current_property_instance("alpha13_err",alpha13_err,"1/K")
+        self._add_key_to_current_property_instance("alpha23_err",alpha23_err,"1/K")
+        self._add_key_to_current_property_instance("thermal-expansion-coefficient_err",alpha_final_err,"1/K")
+
+        self._add_key_to_current_property_instance("temperature",temperature,"K")
+
+        self.write_property_instances_to_file()
 
     @staticmethod
     def _run_lammps(modelname: str, temperature_index: int, temperature: float, pressure: float, timestep: float,
@@ -165,6 +259,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
             + f" -log {log_filename}"
             + " -in npt.lammps")
+        #DEBUG: comment these out to not allow the simulation to run, debugging postprocessing of results
         subprocess.run(command, check=True, shell=True)
 
         HeatCapacityPhonon._plot_property_from_lammps_log(
@@ -418,10 +513,13 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         assert time_step_data[cutoff_index] > skip_steps
         assert cutoff_index == 0 or time_step_data[cutoff_index - 1] <= skip_steps
         mean_data = data[cutoff_index:].mean(axis=0).tolist()
+        #TODO: revert these changes after getting uncertianties from kim_convergence
+        std_data = data[cutoff_index:].std(axis=0).tolist()
         with open(output_file, "w") as f:
             print("# Full time-averaged data for cell information", file=f)
             print(f"# {' '.join(name for name in property_names if name != 'TimeStep')}", file=f)
             print(" ".join(str(mean_data[i]) for i, name in enumerate(property_names) if name != "TimeStep"), file=f)
+            print(" ".join(str(std_data[i]) for i, name in enumerate(property_names) if name != "TimeStep"), file=f)
 
     @staticmethod
     def _get_positions_from_averaged_lammps_dump(filename: str) -> List[Tuple[float, float, float]]:
@@ -431,12 +529,22 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
     @staticmethod
     def _get_cell_from_averaged_lammps_dump(filename: str) -> npt.NDArray[np.float64]:
         cell_list = np.loadtxt(filename, comments='#')
-        assert len(cell_list) == 6
+        assert len(cell_list) == 2
+        assert len(cell_list[0]) == 6
+        assert len(cell_list[1]) == 6
         cell = np.empty(shape=(3, 3))
-        cell[0, :] = np.array([cell_list[0], 0.0, 0.0])
-        cell[1, :] = np.array([cell_list[3], cell_list[1], 0.0])
-        cell[2, :] = np.array([cell_list[4], cell_list[5], cell_list[2]])
+        cell[0, :] = np.array([cell_list[0][0], 0.0, 0.0])
+        cell[1, :] = np.array([cell_list[0][3], cell_list[0][1], 0.0])
+        cell[2, :] = np.array([cell_list[0][4], cell_list[0][5], cell_list[0][2]])
         return cell
+    
+    @staticmethod
+    def _get_cell_parameters_and_errors_from_averaged_lammps_dump(filename: str) -> npt.NDArray[np.float64]:
+        cell_list = np.loadtxt(filename, comments='#')
+        assert len(cell_list) == 2
+        assert len(cell_list[0]) == 6
+        assert len(cell_list[1]) == 6
+        return cell_list
 
     @staticmethod
     def _compute_heat_capacity(temperatures: List[float], log_filenames: List[str],
@@ -466,6 +574,274 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             temperatures, enthalpy_means, enthalpy_errs)
 
         return heat_capacity
+    
+    ###############################################################################
+    #
+    # _compute_alpha
+    #
+    # compute the linear thermal expansion tensor from the simulation results
+    #
+    # Arguments:
+    # cell_list: list of N list of pairs of list with 6 floats each,
+    #            the first corresponding to cell sizes and angles,
+    #            and the second their errors,
+    #            where N is the number of temperatures sampled
+    # temperatures: temperature list of length N
+    # prototype_label: aflow crystal structure designation
+    #
+    ###############################################################################
+    @staticmethod
+    def _compute_alpha(cell_list: List[List[float]], temperatures: List[float], prototype_label: str):
+
+        lx=[]
+        ly=[]
+        lz=[]
+        xy=[]
+        xz=[]
+        yz=[]
+
+        lx_errs=[]
+        ly_errs=[]
+        lz_errs=[]
+        xy_errs=[]
+        xz_errs=[]
+        yz_errs=[]
+
+        space_group=int(prototype_label.split("_")[2])
+        
+        for cell in cell_list:
+            data=cell[0]
+            
+            dimensions=data[0]
+            lx.append(dimensions[0])
+            ly.append(dimensions[1])
+            lz.append(dimensions[2])
+            xy.append(dimensions[3])
+            xz.append(dimensions[4])
+            yz.append(dimensions[5])
+            
+            errs=data[1]
+            lx_errs.append(errs[0])
+            ly_errs.append(errs[1])
+            lz_errs.append(errs[2])
+            xy_errs.append(errs[3])
+            xz_errs.append(errs[4])
+            yz_errs.append(errs[5])
+
+        lx = np.asarray(lx)
+        ly = np.asarray(ly)
+        lz = np.asarray(lz)
+        xy = np.asarray(xy)
+        xz = np.asarray(xz)
+        yz = np.asarray(yz)
+
+        lx_errs = np.asarray(lx_errs)
+        ly_errs = np.asarray(ly_errs)
+        lz_errs = np.asarray(lz_errs)
+        xy_errs = np.asarray(xy_errs)
+        xz_errs = np.asarray(xz_errs)
+        yz_errs = np.asarray(yz_errs)
+
+        lx_devel,lx_devel_err=HeatCapacityPhonon._extract_mean_error_from_logfile("lammps_temperature_4.log",4)
+        print(lx_devel,lx_devel_err)
+
+        # transform lammps cell parameters to lengths and angles
+        # https://docs.lammps.org/Howto_triclinic.html#crystallographic-general-triclinic-representation-of-a-simulation-box
+        a=lx
+        b=np.sqrt(ly**2 + xy**2)
+        c=np.sqrt(lz**2 + xz**2 + yz**2)
+        alpha_angle=np.degrees(np.arccos((xy * xz + ly * yz)/(b * c)))
+        beta_angle=np.degrees(np.arccos(xz/c))
+        gamma_angle=np.degrees(np.arccos(xy/b))
+
+        a_errs=lx_errs
+        b_errs=np.sqrt((ly/np.sqrt(ly**2+xy**2))**2 * ly_errs**2 + (xz/np.sqrt(ly**2+xy**2))**2 * xz_errs**2)
+        c_err_denom_squared=lz**2 + xz**2 + yz**2
+        c_errs = np.sqrt((lz**2/c_err_denom_squared) * lz_errs**2 + (xz**2/c_err_denom_squared) * xz_errs**2 + (yz**2/c_err_denom_squared) * yz_errs**2)
+        alpha_angle_denom=b*c*np.sqrt(1-((xy*xz+ly*lz)/(b*c)**2))
+        alpha_angle_errs=np.sqrt((xy/alpha_angle_denom)**2 * xy_errs**2 + (xz/alpha_angle_denom)**2 * xz_errs**2 + (ly/alpha_angle_denom)**2 * ly_errs**2 + (lz/alpha_angle_denom)**2 * lz_errs**2 + ((xy*xz +ly*lz)/b*alpha_angle_denom)**2 * b_errs**2 + ((xy*xz +ly*lz)/c*alpha_angle_denom)**2 * c_errs**2)
+        beta_angle_denom=c*np.sqrt(1-(xz/c)**2)
+        beta_angle_errs=np.sqrt(beta_angle_denom**2 * xz_errs**2 + (xz/c*beta_angle_denom)**2 * c_errs**2)
+        gamma_angle_denom=b*np.sqrt(1-(xy/b)**2)
+        gamma_angle_errs=np.sqrt(gamma_angle_denom**2 * xy_errs**2 + (xy/b*gamma_angle_denom)**2 * b_errs**2)
+
+
+        # needed for all space groups
+        # Use finite differences to estimate derivative.
+        temperature_step = temperatures[1] - temperatures[0]
+        assert all(abs(temperatures[i+1] - temperatures[i] - temperature_step)
+                   < 1.0e-12 for i in range(len(temperatures) - 1))
+        assert len(temperatures) >= 3
+        max_accuracy = len(temperatures) - 1
+        aslope = {}
+        for accuracy in range(2, max_accuracy + 1, 2):
+            aslope[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                temperature_step, a, a_errs, accuracy)
+            
+        # create entries of the same format
+        # for zero-valued tensor components
+        zero = {}
+        for accuracy in range(2, max_accuracy + 1, 2):
+            zero[f"finite_difference_accuracy_{accuracy}"]=(0.0,0.0)
+
+        # extract values of cell parameters at target temperature
+        aval=a[int(len(a)/2)]
+        bval=b[int(len(b)/2)]
+        cval=c[int(len(c)/2)]
+        alphaval=alpha_angle[int(len(a)/2)]
+        betaval=beta_angle[int(len(a)/2)]
+        gammaval=gamma_angle[int(len(a)/2)]
+
+        aval_err=a_errs[int(len(a)/2)]
+        bval_err=b_errs[int(len(a)/2)]
+        cval_err=c_errs[int(len(a)/2)]
+        alphaval_err=alpha_angle_errs[int(len(a)/2)]
+        betaval_err=beta_angle_errs[int(len(a)/2)]
+        gammaval_err=gamma_angle_errs[int(len(a)/2)]
+
+        #TODO: implement error propogation for each component of alpha for all cases
+        # if the space group is cubic, only compute alpha11
+        if space_group>=195:
+            alpha11=copy.deepcopy(zero)
+            for accuracy in range(2, max_accuracy + 1, 2):
+                alpha11[f"finite_difference_accuracy_{accuracy}"]=aslope[f"finite_difference_accuracy_{accuracy}"]/aval
+            alpha22=alpha11
+            alpha33=alpha11
+
+            alpha12=copy.deepcopy(zero)
+            alpha13=copy.deepcopy(zero)
+            alpha23=copy.deepcopy(zero)
+
+        # hexagona, trigonal, tetragonal space groups also compute alpha33
+        elif space_group>=75 and space_group<=194:
+
+            cslope = {}
+            for accuracy in range(2, max_accuracy + 1, 2):
+                cslope[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                    temperature_step, c, c_errs, accuracy)
+            
+            alpha11=copy.deepcopy(zero)
+            alpha33=copy.deepcopy(zero)
+            for accuracy in range(2, max_accuracy + 1, 2):
+                alpha11[f"finite_difference_accuracy_{accuracy}"]=aslope[f"finite_difference_accuracy_{accuracy}"]/aval
+                alpha33[f"finite_difference_accuracy_{accuracy}"]=cslope[f"finite_difference_accuracy_{accuracy}"]/cval
+            alpha22=alpha33
+
+            alpha12=copy.deepcopy(zero)
+            alpha13=copy.deepcopy(zero)
+            alpha23=copy.deepcopy(zero)
+
+        # orthorhombic, also compute alpha22
+        elif space_group>=16 and space_group<=74:
+            bslope = {}
+            cslope = {}
+            for accuracy in range(2, max_accuracy + 1, 2):
+                bslope[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                    temperature_step, b, b_errs, accuracy)
+                cslope[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                    temperature_step, c, c_errs, accuracy)
+            
+            alpha11=copy.deepcopy(zero)
+            alpha22=copy.deepcopy(zero)
+            alpha33=copy.deepcopy(zero)
+            for accuracy in range(2, max_accuracy + 1, 2):
+                alpha11[f"finite_difference_accuracy_{accuracy}"]=aslope[f"finite_difference_accuracy_{accuracy}"]/aval
+                alpha22[f"finite_difference_accuracy_{accuracy}"]=bslope[f"finite_difference_accuracy_{accuracy}"]/bval
+                alpha33[f"finite_difference_accuracy_{accuracy}"]=cslope[f"finite_difference_accuracy_{accuracy}"]/cval
+
+            alpha12=copy.deepcopy(zero)
+            alpha13=copy.deepcopy(zero)
+            alpha23=copy.deepcopy(zero)
+
+        # monoclinic or triclinic
+        elif space_group<=15:
+            bslope = {}
+            cslope = {}
+            alpha_angle_slope = {}
+            beta_angle_slope = {}
+            gamma_angle_slope = {}
+            for accuracy in range(2, max_accuracy + 1, 2):
+                bslope[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                    temperature_step, b, b_errs, accuracy)
+                cslope[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                    temperature_step, c, c_errs, accuracy)
+                alpha_angle_slope[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                    temperature_step, alpha_angle, alpha_angle_errs, accuracy)
+                beta_angle_slope[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                    temperature_step, beta_angle, beta_angle_errs, accuracy)
+                gamma_angle_slope[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                    temperature_step, gamma_angle, gamma_angle_errs, accuracy)
+
+            #TODO: test loop over finite_difference_accuracy
+            for accuracy in range(2, max_accuracy + 1, 2):
+                alpha11[f"finite_difference_accuracy_{accuracy}"] = (1/aval) * aslope[f"finite_difference_accuracy_{accuracy}"]
+                alpha22[f"finite_difference_accuracy_{accuracy}"] = (1/bval) * bslope[f"finite_difference_accuracy_{accuracy}"] + gamma_angle_slope[f"finite_difference_accuracy_{accuracy}"] * (1/np.tan(np.radians(gammaval)))
+                alpha33[f"finite_difference_accuracy_{accuracy}"] = (1/cval) * cslope[f"finite_difference_accuracy_{accuracy}"]
+                alpha12[f"finite_difference_accuracy_{accuracy}"] = (-1/2) * ((1/aval) * aslope[f"finite_difference_accuracy_{accuracy}"] - (1/bval) * bslope[f"finite_difference_accuracy_{accuracy}"]) * (1/np.tan(np.radians(gammaval))) - (1/2) * gamma_angle_slope[f"finite_difference_accuracy_{accuracy}"]
+                alpha13[f"finite_difference_accuracy_{accuracy}"] = (-1/2) * beta_angle_slope[f"finite_difference_accuracy_{accuracy}"]
+                alpha23[f"finite_difference_accuracy_{accuracy}"] = (1/2) * ((-1/np.sin(np.radians(gammaval))) * alpha_angle_slope[f"finite_difference_accuracy_{accuracy}"] + beta_angle_slope[f"finite_difference_accuracy_{accuracy}"] * (1/np.tan(np.radians(gammaval))))
+        
+            # triclinic
+            if space_group<=2:
+
+                #TODO: determine if needed with finite_difference_accuracy
+                # a=np.asarray(a)
+                # b=np.asarray(b)
+                # c=np.asarray(c)
+                # alpha_angle=np.asarray(alpha_angle)
+                # beta_angle=np.asarray(beta_angle)
+                # gamma_angle=np.asarray(gamma_angle)
+
+                # calculating reciprocal lattice angle gamma_star, and its temperature derivitive
+                gamma_star_array=np.arccos((np.cos(np.radians(alpha_angle))*np.cos(np.radians(beta_angle)) - np.cos(np.radians(gamma_angle)))/(np.sin(np.radians(alpha_angle))*np.sin(np.radians(beta_angle))))
+                gamma_star_errs=np.arccos((np.cos(np.radians(alpha_angle_errs))*np.cos(np.radians(beta_angle_errs)) - np.cos(np.radians(gamma_angle_errs)))/(np.sin(np.radians(alpha_angle_errs))*np.sin(np.radians(beta_angle_errs))))
+                gamma_star=gamma_star_array[int(len(gamma_star_array)/2)]
+
+                gamma_star_prime = {}
+                for accuracy in range(2, max_accuracy + 1, 2):
+                    gamma_star_prime[f"finite_difference_accuracy_{accuracy}"] = HeatCapacityPhonon._get_center_finite_difference_and_error(
+                        temperature_step, gamma_star_array, gamma_star_errs, accuracy)
+                
+                #TODO: test loop over finite_difference_accuracy
+                for accuracy in range(2, max_accuracy + 1, 2):
+                    alpha11[f"finite_difference_accuracy_{accuracy}"] = (1/aval) * aslope[f"finite_difference_accuracy_{accuracy}"] + beta_angle_slope[f"finite_difference_accuracy_{accuracy}"] * (1/np.tan(np.radians(betaval)))
+                    alpha22[f"finite_difference_accuracy_{accuracy}"] = (1/bval) * bslope + alpha_angle_slope[f"finite_difference_accuracy_{accuracy}"] * (1/np.tan(np.radians(alphaval))) + gamma_star_prime[f"finite_difference_accuracy_{accuracy}"] * (1/np.tan(gamma_star))
+                    alpha33[f"finite_difference_accuracy_{accuracy}"] = (1/cval) * cslope[f"finite_difference_accuracy_{accuracy}"]
+                    alpha12[f"finite_difference_accuracy_{accuracy}"] = (1/2) * (1/np.tan(gamma_star)) * ((1/aval) * aslope[f"finite_difference_accuracy_{accuracy}"] - (1/bval) * bslope[f"finite_difference_accuracy_{accuracy}"] - alpha_angle_slope[f"finite_difference_accuracy_{accuracy}"] * (1/np.tan(alphaval)) + beta_angle_slope[f"finite_difference_accuracy_{accuracy}"] * (1/np.tan(betaval))) + (1/2) * gamma_star_prime[f"finite_difference_accuracy_{accuracy}"]
+                    alpha13[f"finite_difference_accuracy_{accuracy}"] = (1/2) * ((1/aval) * aslope[f"finite_difference_accuracy_{accuracy}"] - (1/cval) * cslope[f"finite_difference_accuracy_{accuracy}"]) * (1/np.tan(betaval)) - (1/2) * beta_angle_slope[f"finite_difference_accuracy_{accuracy}"]
+                    alpha23[f"finite_difference_accuracy_{accuracy}"] = (1/2) * (((1/aval) * aslope[f"finite_difference_accuracy_{accuracy}"] - (1/cval) * cslope[f"finite_difference_accuracy_{accuracy}"]) * (1/np.tan(gamma_star)) * (1/np.tan(betaval)) + ((1/bval) * bslope[f"finite_difference_accuracy_{accuracy}"] - (1/cval) * cslope[f"finite_difference_accuracy_{accuracy}"]) * (1/(np.tan(alphaval)*np.sin(gamma_star))) - ((1/np.sin(gamma_star)) * alpha_angle_slope[f"finite_difference_accuracy_{accuracy}"] + beta_angle_slope[f"finite_difference_accuracy_{accuracy}"] * (1/np.tan(gamma_star))))
+
+        else:
+            raise RuntimeError("invalid space group in prototype label")
+        
+        # enforce tensor symmetries
+        alpha21=alpha12
+        alpha31=alpha13
+        alpha32=alpha23
+
+        alpha=np.array([[alpha11,alpha12,alpha13],
+                        [alpha21,alpha22,alpha23],
+                        [alpha31,alpha32,alpha33]])
+
+        # thermal expansion coeff tensor
+        return alpha
+
+    @staticmethod
+    def _check_lammps_log_for_wrong_structure_format(log_file):
+        wrong_format_in_structure_file=False
+
+        try:
+            with open(log_file,"r") as logfile:
+                data=logfile.read()
+                data=data.split("\n")
+                final_line=data[-2]
+
+                if final_line == "Last command: read_data output/zero_temperature_crystal.lmp":
+                    wrong_format_in_structure_file=True
+        except FileNotFoundError:
+            pass
+
+        return wrong_format_in_structure_file
 
     @staticmethod
     def _get_slope_and_error(x_values: List[float], y_values: List[float], y_errs: List[float]):
@@ -542,9 +918,14 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
 
 
 if __name__ == "__main__":
-    model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
+    # model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
+    model_name = "EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_005"
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
     test_driver = HeatCapacityPhonon(model_name)
-    test_driver(bulk("Ar", "fcc", a=5.248), temperature=10.0, pressure=1.0, temperature_step_fraction=0.01,
-                number_symmetric_temperature_steps=2, timestep=0.001, number_sampling_timesteps=100,
-                repeat=(7, 7, 7), loose_triclinic_and_monoclinic=False, max_workers=5)
+    list_of_queried_structures = query_crystal_genome_structures(kim_model_name=model_name,
+                                                                stoichiometric_species=['Al'],
+                                                                prototype_label='A_cF4_225_a')
+    for queried_structure in list_of_queried_structures:
+        test_driver(**queried_structure, temperature=293.15, pressure=1.0, temperature_step_fraction=0.01,
+                    number_symmetric_temperature_steps=2, timestep=0.001, number_sampling_timesteps=100,
+                    repeat=(3, 3, 3), loose_triclinic_and_monoclinic=True, max_workers=5)
