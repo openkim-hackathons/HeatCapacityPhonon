@@ -19,22 +19,6 @@
     "description" "Constant pressure phonon heat capacity of solid"
   }
 
-  "constant_pressure_heat_capacity_err" {
-    "type"         "float"
-    "has-unit"     true
-    "extent"       []
-    "required"     true
-    "description" "Error in constant volume phonon heat capacity of solid."
-  }
-
-  "pressure" {
-    "type"          "float"
-    "has-unit"      true
-    "extent"        []
-    "required"      true
-    "description"   "Pressure of system"
-  }
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; END OF NEW FIELDS TO DEFINE
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
