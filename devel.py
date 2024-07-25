@@ -3,6 +3,7 @@ from math import ceil, sqrt
 import os
 import random
 import re
+import shutil
 import subprocess
 from typing import Dict, Iterable, List, Optional, Tuple
 from ase import Atoms
@@ -82,6 +83,13 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
         structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
         atoms_new.write(structure_file, format="lammps-data", masses=True)
+
+        # Choose the correct kim-convergence accuracies file based on whether the cell is orthogonal or not.
+        if atoms_new.get_cell().orthorhombic:
+            shutil.copyfile("accuracies_orthogonal.py", "accuracies.py")
+        else:
+            shutil.copyfile("accuracies_non_orthogonal.py", "accuracies.py")
+
         # Run Lammps simulations in parallel.
         futures = []
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
