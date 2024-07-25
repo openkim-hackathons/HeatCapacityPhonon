@@ -1,9 +1,10 @@
 """Run length control for LAMMPS."""
 
 import numpy as np
-from typing import Optional
+from typing import Optional, Sequence
 from lammps import lammps
 import kim_convergence as cr
+from accuracies import RELATIVE_ACCURACY, ABSOLUTE_ACCURACY
 
 # Initial run length
 INITIAL_RUN_LENGTH: int = 10000
@@ -17,13 +18,7 @@ MAX_RUN_LENGTH: int = 1000 * INITIAL_RUN_LENGTH
 # the maximum equilibration step.
 MAX_EQUILIBRATION_STEP: Optional[int] = 500 * INITIAL_RUN_LENGTH
 # Maximum number of independent samples.
-MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = 300
-# A relative half-width requirement or the accuracy parameter. Target value
-# for the ratio of halfwidth to sample mean. If n_variables > 1,
-# relative_accuracy can be a scalar to be used for all variables or a 1darray
-# of values of size n_variables.
-RELATIVE_ACCURACY: float = 0.01
-ABSOLUTE_ACCURACY: Optional[float] = None
+MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = 1000
 # Probability (or confidence interval) and must be between 0.0 and 1.0, and
 # represents the confidence for calculation of relative halfwidths estimation.
 CONFIDENCE: float = 0.95
