@@ -160,14 +160,20 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
         # TODO: We should write some coordinate file.
         self.poscar = None
 
-        # Write property.
+        # Write property
         self._add_property_instance_and_common_crystal_genome_keys(
             "heat-capacity-phonon-npt", write_stress=True, write_temp=True)  # last two default to False
+        self._add_key_to_current_property_instance("constant_pressure_heat_capacity", c, "eV/Kelvin",
+                                                   uncertainty_info=uncertainty_info)
+        self._add_key_to_current_property_instance("cell-cauchy-stress", variables['pressure'], "bars")
+
+        # Write property.
+        self._add_property_instance_and_common_crystal_genome_keys(
+            "heat-capacity-npt", write_stress=True, write_temp=True)  # last two default to False
         self._add_key_to_current_property_instance(
-            "constant_pressure_heat_capacity", c["finite_difference_accuracy_2"][0], "eV/Kelvin")
-        self._add_key_to_current_property_instance(
-            "constant_pressure_heat_capacity_err", c["finite_difference_accuracy_2"][1], "eV/Kelvin")
-        self._add_key_to_current_property_instance("pressure", pressure, "bars")
+            "constant_pressure_heat_capacity", c["finite_difference_accuracy_2"][0], "eV/Kelvin",
+            uncertainty_info={"constant_pressure_heat_capacity_uncert_value": c["finite_difference_accuracy_2"][1]})
+        self._add_key_to_current_property_instance("pressure", [pressure] * 3 + [0.0] * 3, "bars")
 
         max_accuracy = len(temperatures) - 1
 
