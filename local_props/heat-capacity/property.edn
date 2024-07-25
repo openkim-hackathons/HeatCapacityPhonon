@@ -1,7 +1,7 @@
 {
-  "property-id" "tag:staff@noreply.openkim.org,2024-03-11:property/heat-capacity-phonon-npt"
+  "property-id" "tag:staff@noreply.openkim.org,2024-03-11:property/heat-capacity-npt"
 
-  "property-title" "Phonon heat capacity of crystal at NPT"
+  "property-title" "Heat capacity of crystal at NPT"
 
   "property-description" "Heat capacity of a crystal calculated at constant pressure.
   This is computed from two NPT simulations by finite difference, using kim-convergence
@@ -16,23 +16,7 @@
     "has-unit"     true
     "extent"       []
     "required"     true
-    "description" "Constant pressure phonon heat capacity of solid"
-  }
-
-  "constant_pressure_heat_capacity_err" {
-    "type"         "float"
-    "has-unit"     true
-    "extent"       []
-    "required"     true
-    "description" "Error in constant volume phonon heat capacity of solid."
-  }
-
-  "pressure" {
-    "type"          "float"
-    "has-unit"      true
-    "extent"        []
-    "required"      true
-    "description"   "Pressure of system"
+    "description" "Constant pressure heat capacity of solid"
   }
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
