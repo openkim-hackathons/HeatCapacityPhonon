@@ -1,4 +1,5 @@
 from concurrent.futures import as_completed, ProcessPoolExecutor
+import copy
 from math import ceil, sqrt
 import os
 import random
@@ -14,12 +15,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import scipy.optimize
-import copy
 from kim_tools.test_driver import CrystalGenomeTestDriver
 from kim_tools import query_crystal_genome_structures
 
 
-class HeatCapacityPhonon(CrystalGenomeTestDriver):
+class HeatCapacity(CrystalGenomeTestDriver):
     def _calculate(self, temperature: float, pressure: float, temperature_step_fraction: float,
                    number_symmetric_temperature_steps: int, timestep: float, number_sampling_timesteps: int,
                    repeat: Tuple[int, int, int] = (3, 3, 3), loose_triclinic_and_monoclinic=False,
@@ -33,8 +33,8 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
             This indicates which is being used for the current calculation.
 
         temperature:
-            Temperature in Kelvin at which the phonon contribution to the heat capacity 
-            at constant volume is estimated. Must be strictly greater than zero.
+            Temperature in Kelvin at which the heat capacity at constant pressure is estimated. Must be strictly greater
+            than zero.
 
         pressure:
             Pressure in bar of the NPT simulation for the initial equilibration of the 
@@ -162,7 +162,7 @@ class HeatCapacityPhonon(CrystalGenomeTestDriver):
 
         # Write property
         self._add_property_instance_and_common_crystal_genome_keys(
-            "heat-capacity-phonon-npt", write_stress=True, write_temp=True)  # last two default to False
+            "heat-capacity-npt", write_stress=True, write_temp=True)  # last two default to False
         self._add_key_to_current_property_instance("constant_pressure_heat_capacity", c, "eV/Kelvin",
                                                    uncertainty_info=uncertainty_info)
         self._add_key_to_current_property_instance("cell-cauchy-stress", variables['pressure'], "bars")
