@@ -7,7 +7,7 @@ from ase.io.lammpsdata import write_lammps_data
 import numpy as np
 from kim_tools import query_crystal_genome_structures
 from kim_tools.test_driver import CrystalGenomeTestDriver
-from .helper_functions import (check_lammps_log_for_wrong_structure_format, compute_alpha, compute_heat_capacity,
+from helper_functions import (check_lammps_log_for_wrong_structure_format, compute_alpha, compute_heat_capacity,
                                get_cell_from_averaged_lammps_dump, get_positions_from_averaged_lammps_dump,
                                reduce_and_avg, run_lammps)
 
@@ -77,7 +77,6 @@ class HeatCapacity(CrystalGenomeTestDriver):
         TDdirectory = os.path.dirname(os.path.realpath(__file__))
         structure_file = os.path.join(TDdirectory, "output/zero_temperature_crystal.lmp")
         atoms_new.write(structure_file, format="lammps-data", masses=True)
-
         # Handle cases where kim models expect different structure file formats.
         try:
             run_lammps(self.kim_model_name, 0, temperatures[0], pressure, timestep,
@@ -158,8 +157,7 @@ class HeatCapacity(CrystalGenomeTestDriver):
             "heat-capacity-npt", write_stress=True, write_temp=True)  # last two default to False
         self._add_key_to_current_property_instance(
             "constant_pressure_heat_capacity", c["finite_difference_accuracy_2"][0], "eV/Kelvin",
-            uncertainty_info={"constant_pressure_heat_capacity_uncert_value": c["finite_difference_accuracy_2"][1]})
-        self._add_key_to_current_property_instance("pressure", [pressure] * 3 + [0.0] * 3, "bars")
+            uncertainty_info={"source-std-uncert-value": c["finite_difference_accuracy_2"][1]})
 
         max_accuracy = len(temperatures) - 1
 
@@ -195,35 +193,25 @@ class HeatCapacity(CrystalGenomeTestDriver):
 
         self._add_property_instance_and_common_crystal_genome_keys("thermal-expansion-coefficient-npt",
                                                                    write_stress=True, write_temp=True)
-        self._add_key_to_current_property_instance("alpha11", alpha11, "1/K")
-        self._add_key_to_current_property_instance("alpha22", alpha22, "1/K")
-        self._add_key_to_current_property_instance("alpha33", alpha33, "1/K")
-        self._add_key_to_current_property_instance("alpha12", alpha12, "1/K")
-        self._add_key_to_current_property_instance("alpha13", alpha13, "1/K")
-        self._add_key_to_current_property_instance("alpha23", alpha23, "1/K")
-        self._add_key_to_current_property_instance("thermal-expansion-coefficient", alpha_final, "1/K")
-
-        self._add_key_to_current_property_instance("alpha11_err", alpha11_err, "1/K")
-        self._add_key_to_current_property_instance("alpha22_err", alpha22_err, "1/K")
-        self._add_key_to_current_property_instance("alpha33_err", alpha33_err, "1/K")
-        self._add_key_to_current_property_instance("alpha12_err", alpha12_err, "1/K")
-        self._add_key_to_current_property_instance("alpha13_err", alpha13_err, "1/K")
-        self._add_key_to_current_property_instance("alpha23_err", alpha23_err, "1/K")
-        self._add_key_to_current_property_instance("thermal-expansion-coefficient_err", alpha_final_err, "1/K")
-
-        self._add_key_to_current_property_instance("temperature", temperature, "K")
+        self._add_key_to_current_property_instance("alpha11", alpha11, "1/K", uncertainty_info={"source-std-uncert-value":alpha11_err})
+        self._add_key_to_current_property_instance("alpha22", alpha22, "1/K", uncertainty_info={"source-std-uncert-value":alpha22_err})
+        self._add_key_to_current_property_instance("alpha33", alpha33, "1/K", uncertainty_info={"source-std-uncert-value":alpha33_err})
+        self._add_key_to_current_property_instance("alpha12", alpha12, "1/K", uncertainty_info={"source-std-uncert-value":alpha12_err})
+        self._add_key_to_current_property_instance("alpha13", alpha13, "1/K", uncertainty_info={"source-std-uncert-value":alpha13_err})
+        self._add_key_to_current_property_instance("alpha23", alpha23, "1/K", uncertainty_info={"source-std-uncert-value":alpha23_err})
+        self._add_key_to_current_property_instance("thermal-expansion-coefficient", alpha_final, "1/K", uncertainty_info={"source-std-uncert-value":alpha_final_err})
 
         self.write_property_instances_to_file()
 
 
 if __name__ == "__main__":
     # model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
-    model_name = "Sim_LAMMPS_ReaxFF_BrugnoliMiyataniAkaji_SiCeNaClHO_2023__SM_282799919035_000"
+    model_name = "EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_005"
     subprocess.run(f"kimitems install {model_name}", shell=True, check=True)
     test_driver = HeatCapacity(model_name)
     list_of_queried_structures = query_crystal_genome_structures(kim_model_name=model_name,
-                                                                 stoichiometric_species=['Ce', 'O'],
-                                                                 prototype_label='AB2_cF12_225_a_c')
+                                                                 stoichiometric_species=['Al'],
+                                                                 prototype_label='A_cF4_225_a')
     for queried_structure in list_of_queried_structures:
         test_driver(**queried_structure, temperature=293.15, pressure=1.0, temperature_step_fraction=0.01,
                     number_symmetric_temperature_steps=2, timestep=0.001, number_sampling_timesteps=100,
