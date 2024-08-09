@@ -160,7 +160,6 @@ class HeatCapacity(CrystalGenomeTestDriver):
             uncertainty_info={"source-std-uncert-value": c["finite_difference_accuracy_2"][1]})
 
         max_accuracy = len(temperatures) - 1
-
         alpha11 = alpha[0][0][f"finite_difference_accuracy_{max_accuracy}"][0]
         alpha11_err = alpha[0][0][f"finite_difference_accuracy_{max_accuracy}"][1]
         alpha12 = alpha[0][1][f"finite_difference_accuracy_{max_accuracy}"][0]
@@ -202,7 +201,7 @@ class HeatCapacity(CrystalGenomeTestDriver):
         self._add_key_to_current_property_instance("thermal-expansion-coefficient", alpha_final, "1/K", uncertainty_info={"source-std-uncert-value":alpha_final_err})
 
         self.write_property_instances_to_file()
-
+        print(c) 
 
 if __name__ == "__main__":
     # model_name = "LJ_Shifted_Bernardes_1958MedCutoff_Ar__MO_126566794224_004"
