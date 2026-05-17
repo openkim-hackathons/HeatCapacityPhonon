@@ -19,8 +19,15 @@ if temperature_K != "":
 else:
     print("No temperature given")
     temperature_K = 0
+pressure_eV_angstrom3 = input("pressure (eV/angstrom^3)?\n")
+if pressure_eV_angstrom3 != "":
+    pressure_eV_angstrom3 = float(pressure_eV_angstrom3)
+    print(pressure_eV_angstrom3)
+else:
+    print("No pressure given")
+    pressure_eV_angstrom3 = None
 cell_cauchy_stress_eV_angstrom3 = input(
-    "Cauchy stress (literal list of floats, Voigt order xx,yy,zz,yz,xz,xy, eV/A^3)?\n"
+    "Cauchy stress (literal list of floats, Voigt order xx,yy,zz,yz,xz,xy, eV/angstrom^3)?\n"
 ).split()
 if cell_cauchy_stress_eV_angstrom3 != []:
     cell_cauchy_stress_eV_angstrom3 = [
@@ -29,7 +36,7 @@ if cell_cauchy_stress_eV_angstrom3 != []:
     print(cell_cauchy_stress_eV_angstrom3)
 else:
     print("No stress given")
-    cell_cauchy_stress_eV_angstrom3 = [0, 0, 0, 0, 0, 0]
+    cell_cauchy_stress_eV_angstrom3 = None
 runtime_args_text = input("Runtime arguments (literal dictonary)?\n")
 if runtime_args_text != "":
     runtime_args = literal_eval(runtime_args_text)
@@ -42,24 +49,40 @@ query_result = literal_eval(
 )
 print(json.dumps(query_result, indent=2))
 test = TestDriver(model_name)
+successful_run = False
 for structure in query_result:
-    species_match = (
-        structure["stoichiometric-species"]["source-value"]
-        == query_result[0]["stoichiometric-species"]["source-value"]
-    )
-    prototype_match = (
-        structure["prototype-label"]["source-value"]
-        == query_result[0]["prototype-label"]["source-value"]
-    )
-    assert species_match and prototype_match, (
-        "The input structures must have identical "
-        "prototype-label and stoichiometric-species"
-    )
-    test(
-        structure,
-        temperature_K=temperature_K,
-        cell_cauchy_stress_eV_angstrom3=cell_cauchy_stress_eV_angstrom3,
-        **runtime_args
-    )
+    try:
+        species_match = (
+            structure["stoichiometric-species"]["source-value"]
+            == query_result[0]["stoichiometric-species"]["source-value"]
+        )
+        prototype_match = (
+            structure["prototype-label"]["source-value"]
+            == query_result[0]["prototype-label"]["source-value"]
+        )
+        assert species_match and prototype_match, (
+            "The input structures must have identical "
+            "prototype-label and stoichiometric-species"
+        )
+        test(
+            structure,
+            temperature_K=temperature_K,
+            pressure_eV_angstrom3=pressure_eV_angstrom3,
+            cell_cauchy_stress_eV_angstrom3=cell_cauchy_stress_eV_angstrom3,
+            **runtime_args
+        )
+        successful_run = True
+    except Exception as e:
+        print(
+            "The following exception prevented one of the parameter sets from "
+            f"returning a result: \n{repr(e)}"
+        )
+        exc = e
+if not successful_run:
+    raise RuntimeError(
+        "No parameter sets successfully ran. Last exception is attached, "
+        "see output file for others, if any."
+    ) from exc
+test.deduplicate_property_instances(allow_rotation=False)
 test.write_property_instances_to_file()
 copy("kim-tools.log", "output/kim-tools.log")
