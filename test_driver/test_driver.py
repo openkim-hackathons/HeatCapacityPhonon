@@ -487,41 +487,20 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
                                                                          center_cell,
                                                                          space_group)
         
-        # alpha11 unique for all space groups
-        unique_components_names = ["alpha1"]
-        unique_components_values = [alpha11]
-        # unique_components_errs = [alpha11_err]
+        
+        # Pre-fill names and values, then pick out the ones that are unique based on space group num
+        components_names = ["alpha1", "alpha2", "alpha3", "alpha4", "alpha5", "alpha6"]
+        components_values = [alpha11, alpha22, alpha33, alpha23, alpha13, alpha12]
+        maximum_space_group = [230, 74, 194, 2, 15, 2]
 
-        # hexagonal, trigonal, tetragonal space groups alpha33 also unique
-        if space_group <= 194:
-            unique_components_names.append("alpha3")
-            unique_components_values.append(alpha33)
-            # unique_components_errs.append(alpha33_err)
+        unique_components_names = []
+        unique_components_values = []
 
-        # orthorhombic, alpha22 also unique
-        if space_group <= 74:
-
-            # insert alpha22 in the middle so they end up sorted
-            # into voigt notation order
-            unique_components_names.insert(1,"alpha2")
-            unique_components_values.insert(1,alpha22)
-            # unique_components_errs.insert(1,alpha22_err)
-
-        # monoclinic or triclinic, all components potentially unique
-        if space_group <= 15:
-
-            unique_components_names.append("alpha4")
-            unique_components_names.append("alpha5")
-            unique_components_names.append("alpha6")
-
-            unique_components_values.append(alpha23)
-            unique_components_values.append(alpha13)
-            unique_components_values.append(alpha12)
-
-            # unique_components_errs.append(alpha23_err)
-            # unique_components_errs.append(alpha13_err)
-            # unique_components_errs.append(alpha12_err)
-
+        for name, value, max_sg in zip(components_names, components_values, maximum_space_group):
+            if space_group <= max_sg:
+                unique_components_names.append(name)
+                unique_components_values.append(value)
+                
         """
         Presently, errors are not reported because there isn't a good way to get
         the initial uncertainty of the cell parameters. If we determine a good way to do that,
