@@ -22,11 +22,11 @@ class TestDriver(SingleCrystalTestDriver):
         repeat: Optional[Sequence[int]] = None,
         lammps_command: str = "lmp",
         msd_threshold_angstrom_squared_per_sampling_timesteps: float = 0.1,
-        number_msd_timesteps: int = 20000,
+        msd_timesteps: int = 20000,
         thermo_sampling_period: int = 100,
         random_seeds: Optional[Sequence[int]] = (1, 2, 3),
         rlc_n_every: int = 10,
-        rlc_run_length: int = 10000,
+        rlc_initial_run_length: int = 10000,
         rlc_min_samples: int = 100,
         output_dir: str = "output",
         equilibration_plots: bool = True,
@@ -95,13 +95,13 @@ class TestDriver(SingleCrystalTestDriver):
             Default is 0.1.
             Should be bigger than zero.
         :type msd_threshold_angstrom_squared_per_sampling_timesteps: float
-        :param number_msd_timesteps:
+        :param msd_timesteps:
             Number of timesteps to monitor the mean-squared displacement in Lammps.
             Before the mean-squared displacement is monitored, the system will be equilibrated for the same number of
             timesteps.
             Default is 20000 timesteps.
             Should be bigger than zero and a multiple of thermo_sampling_period.
-        :type number_msd_timesteps: int
+        :type msd_timesteps: int
         :param thermo_sampling_period:
             Sample thermodynamic variables every thermo_sampling_period timesteps in Lammps.
             Default is 100 timesteps.
@@ -120,12 +120,12 @@ class TestDriver(SingleCrystalTestDriver):
             Default is 10.
             Should be bigger than zero.
         :type rlc_n_every: int
-        :param rlc_run_length:
+        :param rlc_initial_run_length:
             Run length in timesteps for run-length control with kim-convergence.
             This will also be the timestep interval in generated trajectory files.
             Default is 10000 timesteps.
             Should be bigger than zero and a multiple of thermo_sampling_period.
-        :type rlc_run_length: int
+        :type rlc_initial_run_length: int
         :param rlc_min_samples:
             Minimum number of independent samples for convergence in run-length control with kim-convergence.
             Default is 100.
@@ -232,11 +232,11 @@ class TestDriver(SingleCrystalTestDriver):
         if not msd_threshold_angstrom_squared_per_sampling_timesteps > 0.0:
             raise ValueError("The mean-squared displacement threshold has to be bigger than zero.")
 
-        if not number_msd_timesteps > 0:
+        if not msd_timesteps > 0:
             raise ValueError("The number of timesteps to monitor the mean-squared displacement has to be bigger than "
                              "zero.")
 
-        if not number_msd_timesteps % thermo_sampling_period == 0:
+        if not msd_timesteps % thermo_sampling_period == 0:
             raise ValueError("The number of timesteps to monitor the mean-squared displacement has to be a multiple of "
                              "the thermo sampling period.")
 
@@ -254,10 +254,10 @@ class TestDriver(SingleCrystalTestDriver):
             raise ValueError("The number of timesteps between storage of values for run-length control has to be "
                              "bigger than zero.")
 
-        if not rlc_run_length > 0:
+        if not rlc_initial_run_length > 0:
             raise ValueError("The run length for run-length control has to be bigger than zero.")
 
-        if not rlc_run_length % thermo_sampling_period == 0:
+        if not rlc_initial_run_length % thermo_sampling_period == 0:
             raise ValueError("The run length for run-length control has to be a multiple of the number of the thermo"
                              "sampling period.")
 
@@ -332,7 +332,7 @@ class TestDriver(SingleCrystalTestDriver):
         with open(f"{output_dir}/rlc_parameters.py", "w") as file:
             print(f"""from typing import Optional
 
-INITIAL_RUN_LENGTH: int = {rlc_run_length}
+INITIAL_RUN_LENGTH: int = {rlc_initial_run_length}
 MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", file=file)
 
         # Write lammps file.
@@ -347,8 +347,8 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
             for i, (t, rs) in enumerate(zip(temperatures, random_seeds)):
                 futures.append(executor.submit(
                     run_lammps, self.kim_model_name, i, t, pressure_bar, timestep_ps, thermo_sampling_period,
-                    species, msd_threshold_angstrom_squared_per_sampling_timesteps, number_msd_timesteps,
-                    rlc_run_length, rlc_n_every, output_dir, equilibration_plots, lammps_command, rs))
+                    species, msd_threshold_angstrom_squared_per_sampling_timesteps, msd_timesteps,
+                    rlc_initial_run_length, rlc_n_every, output_dir, equilibration_plots, lammps_command, rs))
 
         # If one simulation fails, cancel all runs.
         for future in as_completed(futures):
