@@ -15,13 +15,25 @@ from .structure_utils import compute_supercell_for_target_size
 
 
 class TestDriver(SingleCrystalTestDriver):
-    def _calculate(self, temperature_step_fraction: float = 0.01, number_symmetric_temperature_steps: int = 1,
-                   timestep_ps: float = 0.001, thermo_sampling_period: int = 100, target_size: int = 10000,
-                   repeat: Optional[Sequence[int]] = None, max_workers: Optional[int] = None,
-                   lammps_command: str = "lmp", msd_threshold_angstrom_squared_per_sampling_timesteps: float = 0.1,
-                   number_msd_timesteps: int = 20000, random_seeds: Optional[Sequence[int]] = (1, 2, 3),
-                   rlc_n_every: int = 10, rlc_run_length: int = 10000, rlc_min_samples: int = 100,
-                   output_dir: str = "output", equilibration_plots: bool = True, **kwargs) -> None:
+    def _calculate(
+        self,
+        timestep_ps: float = 0.001,
+        target_size: int = 10000,
+        repeat: Optional[Sequence[int]] = None,
+        lammps_command: str = "lmp",
+        msd_threshold_angstrom_squared_per_sampling_timesteps: float = 0.1,
+        number_msd_timesteps: int = 20000,
+        thermo_sampling_period: int = 100,
+        random_seeds: Optional[Sequence[int]] = (1, 2, 3),
+        rlc_n_every: int = 10,
+        rlc_run_length: int = 10000,
+        rlc_min_samples: int = 100,
+        output_dir: str = "output",
+        equilibration_plots: bool = True,
+        temperature_step_fraction: float = 0.01,
+        number_symmetric_temperature_steps: int = 1,
+        max_workers: Optional[int] = None, 
+        **kwargs) -> None:
         """
         Estimate constant-pressure heat capacity and linear thermal expansion tensor with finite-difference numerical
         derivatives.
@@ -53,34 +65,11 @@ class TestDriver(SingleCrystalTestDriver):
 
         All output files are written to the given output directory.
 
-        :param temperature_step_fraction:
-            Fraction of the target temperature that is used as temperature step for the finite-difference scheme.
-            For example, if the target temperature is 300 K and the temperature_step_fraction is 0.1, the temperature
-            difference between the different NPT simulations will be 30 K.
-            Should be bigger than zero and smaller than one divided by number_symmetric_temperature_steps (to avoid
-            simulations at negative temperatures).
-            Default is 0.01 (1% of the target temperature).
-            Should be bigger than zero and smaller than one.
-        :type temperature_step_fraction: float
-        :param number_symmetric_temperature_steps:
-            Number of symmetric temperature steps around the target temperature to use for the finite-difference
-            scheme.
-            For example, if number_symmetric_temperature_steps is 2, five NPT simulations will be run at temperatures
-            T - 2*delta_T, T - delta_T, T, T + delta_T, T + 2*delta_T, where delta_T is determined by
-            temperature_step_fraction * T.
-            Default is 1.
-            Should be bigger than zero.
-        :type number_symmetric_temperature_steps: int
         :param timestep_ps:
             Time step in picoseconds.
             Default is 0.001 ps (1 fs).
             Should be bigger than zero.
         :type timestep_ps: float
-        :param thermo_sampling_period:
-            Sample thermodynamic variables every thermo_sampling_period timesteps in Lammps.
-            Default is 100 timesteps.
-            Should be bigger than zero.
-        :type thermo_sampling_period: int
         :param target_size:
             Target number of atoms in the supercell to build by repeating the unit cell. Uses cutoff-based expansion
             with target size constraint (good for non-cubic cells). The algorithm starts with an 20Å cutoff radius and
@@ -96,13 +85,6 @@ class TestDriver(SingleCrystalTestDriver):
             Default is None.
             If not None, all entries have to be bigger than zero.
         :type repeat: Sequence[int]
-        :param max_workers:
-            Maximum number of parallel workers to use for running Lammps simulations at different temperatures.
-            If None is given, this will be set to 1.
-            This is independent of the number of processors used by each Lammps simulation that can be specified in the
-            lammps command itself.
-            Default is None.
-        :type max_workers: Optional[int]
         :param lammps_command:
             Command to run Lammps.
             Default is "lmp".
@@ -119,6 +101,12 @@ class TestDriver(SingleCrystalTestDriver):
             timesteps.
             Default is 20000 timesteps.
             Should be bigger than zero and a multiple of thermo_sampling_period.
+        :type number_msd_timesteps: int
+        :param thermo_sampling_period:
+            Sample thermodynamic variables every thermo_sampling_period timesteps in Lammps.
+            Default is 100 timesteps.
+            Should be bigger than zero.
+        :type thermo_sampling_period: int
         :param random_seeds:
             Random seeds for the Lammps simulations.
             This has to be a sequence of 2 * number_symmetric_temperature_steps + 1 integers for the different
@@ -151,6 +139,31 @@ class TestDriver(SingleCrystalTestDriver):
             Whether to generate diagnostic plots for the equilibration checks in kim-convergence.
             Default is True.
         :type equilibration_plots: bool
+        :param temperature_step_fraction:
+            Fraction of the target temperature that is used as temperature step for the finite-difference scheme.
+            For example, if the target temperature is 300 K and the temperature_step_fraction is 0.1, the temperature
+            difference between the different NPT simulations will be 30 K.
+            Should be bigger than zero and smaller than one divided by number_symmetric_temperature_steps (to avoid
+            simulations at negative temperatures).
+            Default is 0.01 (1% of the target temperature).
+            Should be bigger than zero and smaller than one.
+        :type temperature_step_fraction: float
+        :param number_symmetric_temperature_steps:
+            Number of symmetric temperature steps around the target temperature to use for the finite-difference
+            scheme.
+            For example, if number_symmetric_temperature_steps is 2, five NPT simulations will be run at temperatures
+            T - 2*delta_T, T - delta_T, T, T + delta_T, T + 2*delta_T, where delta_T is determined by
+            temperature_step_fraction * T.
+            Default is 1.
+            Should be bigger than zero.
+        :type number_symmetric_temperature_steps: int
+        :param max_workers:
+            Maximum number of parallel workers to use for running Lammps simulations at different temperatures.
+            If None is given, this will be set to 1.
+            This is independent of the number of processors used by each Lammps simulation that can be specified in the
+            lammps command itself.
+            Default is None.
+        :type max_workers: Optional[int]
 
         :raises ValueError:
             If any of the input arguments are invalid.
