@@ -85,10 +85,11 @@ def run_lammps(modelname: str, temperature_index: int, temperature_K: float, pre
     pdamp = timestep_ps * 1000.0
     tdamp = timestep_ps * 100.0
 
-    # Lammps will be run directly in output_dir so all paths are with respect to that directory.
     log_filename = f"lammps_temperature_{temperature_index}.log"
     restart_filename = f"final_configuration_temperature_{temperature_index}.restart"
     melted_crystal_filename = f"melted_crystal_temperature_{temperature_index}.dump"
+    average_position_filename = f"average_position_temperature_{temperature_index}.dump"
+    average_cell_filename = f"average_cell_temperature_{temperature_index}.dump"
     variables = {
         "modelname": modelname,
         "temperature": temperature_K,
@@ -99,26 +100,32 @@ def run_lammps(modelname: str, temperature_index: int, temperature_K: float, pre
         "timestep": timestep_ps,
         "thermo_sampling_period": thermo_sampling_period,
         "species": " ".join(species),
-        "zero_temperature_crystal_filename": f"zero_temperature_crystal.lmp",
-        "average_position_filename": f"average_position_temperature_{temperature_index}.dump.*",
-        "average_cell_filename": f"average_cell_temperature_{temperature_index}.dump",
-        "write_restart_filename": restart_filename,
-        "trajectory_filename": f"trajectory_{temperature_index}.lammpstrj",
-        "msd_trajectory_filename": f"msd_trajectory_{temperature_index}.lammpstrj",
+        "zero_temperature_crystal_filename": os.path.join(output_dir, "zero_temperature_crystal.lmp"),
+        "average_position_filename": f"{os.path.join(output_dir, average_position_filename)}.*",
+        "average_cell_filename": os.path.join(output_dir, average_cell_filename),
+        "write_restart_filename": os.path.join(output_dir, restart_filename),
+        "trajectory_filename": os.path.join(output_dir, f"trajectory_{temperature_index}.lammpstrj"),
+        "msd_trajectory_filename": os.path.join(output_dir, f"msd_trajectory_{temperature_index}.lammpstrj"),
         "msd_threshold": msd_threshold_angstrom_squared_per_sampling_timesteps,
         "msd_timesteps": number_msd_timesteps,
         "rlc_run_length": rlc_run_length,
         "rlc_n_every": rlc_n_every,
-        "melted_crystal_output": melted_crystal_filename
+        "melted_crystal_output": os.path.join(output_dir, melted_crystal_filename)
     }
 
     command = (
             f"{lammps_command} "
             + " ".join(f"-var {key} '{item}'" for key, item in variables.items())
-            + f" -log {log_filename}"
-            + f" -in npt.lammps")
+            + f" -log {os.path.join(output_dir, log_filename)}"
+            + f" -in {os.path.join(output_dir, 'npt.lammps')}")
 
-    subprocess.run(command, check=True, shell=True, cwd=output_dir)
+    patched_env = os.environ.copy()
+    if "PYTHONPATH" in  patched_env:
+        patched_env["PYTHONPATH"] = f"{output_dir}{os.pathsep}{patched_env['PYTHONPATH']}"
+    else:
+        patched_env["PYTHONPATH"] = output_dir
+
+    subprocess.run(command, check=True, shell=True, env=patched_env)
 
     if equilibration_plots:
         plot_property_from_lammps_log(f"{output_dir}/{log_filename}",
