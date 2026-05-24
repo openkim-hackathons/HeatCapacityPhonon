@@ -27,7 +27,7 @@ class TestDriver(SingleCrystalTestDriver):
         random_seeds: Optional[Sequence[int]] = (1, 2, 3),
         rlc_n_every: int = 10,
         rlc_initial_run_length: int = 10000,
-        rlc_min_samples: int = 400,
+        rlc_min_samples: int = 1000,
         output_dir: str = "output",
         equilibration_plots: bool = True,
         temperature_step_fraction: float = 0.01,
