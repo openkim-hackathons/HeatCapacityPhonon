@@ -1,0 +1,74 @@
+name: Test kimvv
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  test-kimvv:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-15, macos-15-intel]
+
+    runs-on: ${{ matrix.os }}
+    env:
+      CRYSTAL_GENOME_TEST_ARGS: "{'temperature_K': 300, 'target_size': 1000, 'msd_timesteps': 1000, 'lammps_command': 'mpirun -np 2 lmp'}"
+    steps:
+      - name: Checkout project source code
+        uses: actions/checkout@v3
+      - name: Package source code
+        uses: qmonnet/git-archive-all-action@v1
+        with:
+          output-files: td.txz
+      - name: checkout kimvv
+        uses: actions/checkout@v3
+        with:
+          path: kimvv
+          repository: openkim/kimvv
+      - name: Set up micromamba
+        uses: mamba-org/setup-micromamba@v1.9.0
+        with:
+          environment-name: test-env
+          cache-environment: true
+          create-args: >-
+            -f kimvv/test/environment.yml
+
+      - name: Install units and AFLOW on Linux
+        if: runner.os == 'Linux'
+        shell: bash -el {0}
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install units
+          wget https://github.com/aflow-org/aflow/releases/download/v4.1/aflow-4.1-ubuntu22-amd64.tar.gz
+          tar -xf aflow-4.1-ubuntu22-amd64.tar.gz
+
+      - name: Install units and AFLOW on macOS
+        if: runner.os == 'macOS'
+        shell: bash -el {0}
+        run: |
+          brew tap aflow-org/aflow
+          brew install aflow
+          brew install gnu-units      
+      
+      - name: build and test kimvv
+        shell: bash -el {0}
+        run: |
+          export PATH=$PATH:$PWD/aflow-4.1.0-Linux/bin        
+          mv td.txz kimvv
+          # These might not exist, this is basically saying I don't care about exit status
+          if cp -r local_props kimvv/test/; then : ; fi
+          if cp -r local-props kimvv/test/; then : ; fi
+          cd kimvv
+          sed -i' ' "s/DEVEL_TEST_DRIVERS = {}/DEVEL_TEST_DRIVERS = {'td.txz':$CRYSTAL_GENOME_TEST_ARGS}/g;" pre_setup.py
+          python pre_setup.py
+          # Install kimvv only into a special directory that we make unwriteable to mimic a system install
+          # This is to make sure test drivers don't need to write to their own files to run
+          mkdir local-python
+          python -m pip install . -t local-python --no-deps
+          chmod -R -w local-python
+
+          # Now install any dependencies normally. If we install without --no-deps
+          # above, it would install ALL dependencies, including reinstalling
+          # stuff that already exists in the conda env
+          export PYTHONPATH=$PYTHONPATH:$PWD/local-python
+          python -c "from importlib.metadata import requires; print(' '.join(requires('kimvv')))" | xargs python -m pip install        
+          cd test
+          pytest
