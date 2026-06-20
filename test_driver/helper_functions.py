@@ -481,6 +481,9 @@ def compute_heat_capacity(temperatures: List[float], log_filenames: List[str],
     # Use linear fit to estimate derivative.
     heat_capacity["fit"] = get_slope_and_error(
         temperatures, enthalpy_means, enthalpy_errs)
+    
+    heat_capacity["enthalpy_means"] = enthalpy_means
+    heat_capacity["enthalpy_errs"] = enthalpy_errs
 
     return heat_capacity
 

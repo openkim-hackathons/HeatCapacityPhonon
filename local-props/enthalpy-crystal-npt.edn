@@ -1,0 +1,114 @@
+{
+  "property-id" "tag:staff@noreply.openkim.org,2026-06-01:property/enthalpy-crystal-npt"
+
+  "property-title" "Enthalpy of an abritrary crystal at constant temperature and stress state"
+
+  "property-description" "Enthalpy of an arbrary crystal at constant temperature and stress state. The crystal structure is expressed as an AFLOW prototype label and its corresponding free parameters. The reported enthalpy is defined as the enthalpy of the crystal less the potential energy of the isolated constituent particles.\n\n
+  Three values are reported, the `enthalpy-per-atom` is the average enthalpy per atom in the unit cell, the `enthalpy-per-formula` is the enthalpy per chemical formula, which reflects the relative ratio of elements in the primitive unit cell of the crystal, and the `specific-enthalpy` which is the enthalpy per unit of mass. For a crystal containing a single chemical element (regardless of structure) the `-per-atom` and `-per-formula` values are the same, e.g. for hcp Mg the chemical formula is Mg and the 'enthalpy-per-formula' is per magnesium atom (even though the hcp primitive unit cell contains two atoms). For compounds the 'enthalpy-per-formula' will depend on the stoichiometric formula, e.g. for MoS_2 (AB2-type compound) the free energy is per MoS_2 unit (i.e. 3 times larger than the `enthalpy-per-atom` value)."
+
+  "enthalpy-per-atom" {
+    "type"         "float"
+    "has-unit"     true
+    "extent"       []
+    "required"     true
+    "description"  "Enthalpy per atom of the crystal defined as follows: \\Delta \\bar{H}_{atom} = ( H(A_{N_A}B_{N_B}...) - [N_A V_{isolated}(A) + N_B V_{isolated}(B) + ...] )/(N_A + N_B ...), where \\Delta \\bar{H}_{atom} is the enthalpy per atom, H(A_{N_A}B_{N_B}...) is the enthalpy of (any) unit cell, V_{isolated}(X) is the potential energy of an isolated particle of species X, and N_X is the number of atoms of species X in the (same) unit cell."
+  }
+  "enthalpy-per-formula" {
+    "type"         "float"
+    "has-unit"     true
+    "extent"       []
+    "required"     true
+    "description" "This key has the same definition as 'enthalpy-per-atom' except that the free energy is normalized per chemical formula instead of per atom, i.e. \\Delta \\bar{H}_{formula} = \\Delta \\bar{H}_{atom} N_{formula}, where N_{formula} is the number of atoms in the reduced stoichiometric formula, i.e. the sum of indices in the first section of the prototype-label."
+  }
+  "specific-enthalpy" {
+    "type"         "float"
+    "has-unit"     true
+    "extent"       []
+    "required"     true
+    "description" "enthalpy per mass unit, defined as follows: \\Delta \\bar{H}_{specific} = ( H(A_{N_A}B_{N_B}...) - [N_A V_{isolated}(A) + N_B V_{isolated}(B) + ...] )/(N_A m_A + N_B m_b ...), where \\Delta \\bar{H}_{specific} is the specific enthalpy per atom, H(A_{N_A}B_{N_B}...) is the enthalpy of (any) unit cell, V_{isolated}(X) is the potential energy of an isolated particle of species X, N_X is the number of atoms of species X in the (same) unit cell, and m_X is the mass of a single atom of species X."
+  }
+  "temperature" {
+    "type"         "float"
+    "has-unit"     true
+    "extent"       []
+    "required"     true
+    "description"  "Temperature of the crystal."
+  }
+  "cell-cauchy-stress" {
+    "type"         "float"
+    "has-unit"     true
+    "extent"       [6]
+    "required"     true
+    "description"  "The [xx,yy,zz,yz,xz,xy] components of the prescribed symmetric Cauchy stress tensor. The numerical value of the stress tensor of a test result or reference data may be different due to tolerance, and can be checked by inspecting the output files of the test or the reference data description. The components should be expressed in the same coordinate system as the structure specified by prototype-label and parameter-values, with the orientation of lattice vectors defined in M. J. Mehl et al., Comput. Mater. Sci. 136, S1 (2017)."
+  }
+  "prototype-label" {
+    "type"         "string"
+    "has-unit"     false
+    "extent"       []
+    "required"     true
+    "description"  "Prototype label (not including an enumeration suffix) as defined by the AFLOW standard (e.g. 'A_tI4_141_a') for the structure. It is expected that the alphabetically lowest of all equivalent labels is chosen."
+  }
+  "stoichiometric-species" {
+    "type"         "string"
+    "has-unit"     false
+    "extent"       [":"]
+    "required"     true
+    "description"  "Element symbols corresponding to the atom types in the stoichiometric formula which appears at the start of the prototype label (e.g. ['Mo','S'] for the AB2 stoichiometric formula, means that the 'A' atom is 'Mo' and the 'B' atom is 'S' for the MoS_2 structure)."
+  }
+  "a" {
+    "type"         "float"
+    "has-unit"     true
+    "extent"       []
+    "required"     true
+    "description"  "The average 'a' lattice constant of the crystal structure as defined by the AFLOW standard. Relative values of other lattice parameters (if present) are given in the 'parameter-values' key."
+  }
+  "parameter-names" {
+    "type"         "string"
+    "has-unit"     false
+    "extent"       [":"]
+    "required"     false
+    "description"  "Names of the parameters other than 'a', if present, corresponding to this AFLOW prototype. These can include lattice parameters from the set {'b/a','c/a','alpha','beta','gamma'} (for the conventional crystal structure defined by lattice parameters a, b, and c and angles alpha, beta, gamma), and coordinates of Wyckoff positions that have a degree of variability labeled as 'x*', 'y*' and 'z*' where the asterisk represents an integer as defined by the AFLOW standard."
+  }
+  "parameter-values" {
+    "type"         "float"
+    "has-unit"     false
+    "extent"       [":"]
+    "required"     false
+    "description"  "Values for the parameters listed in 'parameter-names' corresponding to the average positions of the atoms. Note that all parameters are dimensionless."
+  }
+  "library-prototype-label" {
+    "type"         "string"
+    "has-unit"     false
+    "extent"       []
+    "required"     false
+    "description"  "The AFLOW library prototype, if any, matching the structure. Prototypes in the AFLOW library are associated with common short names used by the materials community. The library prototype includes an integer enumeration suffix defined by the AFLOW standard (e.g. 'A_tI4_141_a-001' for '$\\beta$-Sn ($A5$) Structure')."
+  }
+  "short-name" {
+    "type"         "string"
+    "has-unit"     false
+    "extent"       [":"]
+    "required"     false
+    "description"  "Commonly used name associated with the 'library-prototype-label' key according to the AFLOW prototype library (e.g. '$\\beta$-Sn ($A5$) Structure')."
+  }
+  "coordinates-file" {
+    "type"         "file"
+    "has-unit"     false
+    "extent"       []
+    "required"     false
+    "description"  "A file containing the atomic configuration including information such as the species, x,y,z coordinates of each particle, and periodicity data. This configuration is the primitive unit cell of the crystal according to the cell choice defined in M. J. Mehl et al., Comput. Mater. Sci. 136, S1 (2017)."
+  }
+  "coordinates-file-conventional" {
+    "type"         "file"
+    "has-unit"     false
+    "extent"       []
+    "required"     false
+    "description"  "A file containing the atomic configuration including information such as the species, x,y,z coordinates of each particle, and periodicity data. This configuration is the conventional unit cell of the crystal according to the cell choice defined in M. J. Mehl et al., Comput. Mater. Sci. 136, S1 (2017)."
+  }
+  "crystal-genome-source-structure-id" {
+    "type"         "string"
+    "has-unit"     false
+    "extent"       [":",":"]
+    "required"     false
+    "description"  "The identifiers (ID) of the Crystal Genome (XtalG) structures for which the property (test result and instance) containing this key was computed. Each element is the KIM ID of an OpenKIM Reference Data item that served as the initial configuration before it was relaxed or equilibrated with an interatomic model. Each row corresponds to a structure in the test, i.e. a test computing a property of a single crystal will only have one row, while something like a transformation between two pre-determined crystals would have two rows, and so on. Within each row, there may be multiple columns in the case when multiple initial structures converged to a single final structure during this test or one of its upstream dependencies. Because KIM Property values must be regular arrays, rows will be padded with empty strings to match the longest row."
+  }
+}
