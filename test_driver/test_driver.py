@@ -5,7 +5,7 @@ import shutil
 from typing import Optional, Sequence
 from ase.calculators.lammps import convert, Prism
 import numpy as np
-from kim_tools import get_stoich_reduced_list_from_prototype, KIMTestDriverError
+from kim_tools import get_stoich_reduced_list_from_prototype, KIMTestDriverError, AFLOW
 from kim_tools.symmetry_util.core import (reduce_and_avg, PeriodExtensionException,
                                           fit_voigt_tensor_to_cell_and_space_group)
 from kim_tools.test_driver import SingleCrystalTestDriver
@@ -389,13 +389,12 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
                 middle_temperature = t
             
             # Check that the symmetry of the structure did not change.
-            if not self._verify_unchanged_symmetry(reduced_atoms):
+            if not self._verify_unchanged_symmetry(reduced_atoms)
+            except (AFLOW.FailedToMatchException, AFLOW.ChangedSymmetryException):
                 reduced_atoms.write(f"{output_dir}/reduced_atoms_temperature_{t_index}_failing.poscar",
                                     format="vasp", sort=True)
                 raise KIMTestDriverError(f"Symmetry of structure changed during simulation at temperature {t} K.")
             
-            # Write NPT crystal structures.
-            self._update_nominal_parameter_values(reduced_atoms)
             # since we're looping over the futures, one per temperature
             # calling this will append the current cell, one per temperature, 
             # into an array for later use
