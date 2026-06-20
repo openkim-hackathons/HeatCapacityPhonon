@@ -27,10 +27,10 @@ class TestDriver(SingleCrystalTestDriver):
         random_seeds: Optional[Sequence[int]] = (1, 2, 3),
         rlc_n_every: int = 10,
         rlc_initial_run_length: int = 10000,
-        rlc_min_samples: int = 1000,
+        rlc_min_samples: Optional[int] = None,
         output_dir: str = "output",
         equilibration_plots: bool = True,
-        temperature_step_fraction: float = 0.01,
+        temperature_step_fraction: float = 0.1,
         number_symmetric_temperature_steps: int = 1,
         max_workers: Optional[int] = None, 
         **kwargs) -> None:
@@ -128,7 +128,9 @@ class TestDriver(SingleCrystalTestDriver):
         :type rlc_initial_run_length: int
         :param rlc_min_samples:
             Minimum number of independent samples for convergence in run-length control with kim-convergence.
-            Default is 100.
+            Based on empirical testing, it appears that higher temperatures require more samples to
+            reach equilibrated atomic positions. If this is not provided, the default is 
+            max(100,temperature_K/3)
             Should be bigger than zero.
         :type rlc_min_samples: int
         :param output_dir:
@@ -247,6 +249,9 @@ class TestDriver(SingleCrystalTestDriver):
             raise ValueError("The run length for run-length control has to be a multiple of the number of the thermo"
                              "sampling period.")
 
+        if rlc_min_samples is None:
+            rlc_min_samples = max(100, int(temperature_K/3))
+            
         if not rlc_min_samples > 0:
             raise ValueError("The minimum number of samples to use for convergence checks in run-length control has to "
                              "be bigger than zero.")
