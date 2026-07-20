@@ -5,7 +5,7 @@ import shutil
 from typing import Optional, Sequence
 from ase.calculators.lammps import convert, Prism
 import numpy as np
-from kim_tools import get_stoich_reduced_list_from_prototype, KIMTestDriverError
+from kim_tools import get_stoich_reduced_list_from_prototype, KIMTestDriverError, AFLOW
 from kim_tools.symmetry_util.core import (reduce_and_avg, PeriodExtensionException,
                                           fit_voigt_tensor_to_cell_and_space_group)
 from kim_tools.test_driver import SingleCrystalTestDriver
@@ -388,14 +388,14 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
                 middle_temperature_atoms = reduced_atoms.copy()
                 middle_temperature = t
             
-            # Check that the symmetry of the structure did not change.
-            if not self._verify_unchanged_symmetry(reduced_atoms):
+            # Get the new parameter values. This raises exceptions in case of a symmetry change.
+            try:
+                self._update_nominal_parameter_values(reduced_atoms)
+            except (AFLOW.FailedToMatchException, AFLOW.ChangedSymmetryException):
                 reduced_atoms.write(f"{output_dir}/reduced_atoms_temperature_{t_index}_failing.poscar",
                                     format="vasp", sort=True)
                 raise KIMTestDriverError(f"Symmetry of structure changed during simulation at temperature {t} K.")
             
-            # Write NPT crystal structures.
-            self._update_nominal_parameter_values(reduced_atoms)
             # since we're looping over the futures, one per temperature
             # calling this will append the current cell, one per temperature, 
             # into an array for later use
@@ -403,9 +403,6 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
             self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt", write_stress=True,
                                                                        write_temp=t)
             self._add_file_to_current_property_instance("restart-file", restart_filename)
-            
-            # Reset to original atoms.
-            self._update_nominal_parameter_values(original_atoms)
 
         assert middle_temperature_atoms is not None
         assert middle_temperature is not None
