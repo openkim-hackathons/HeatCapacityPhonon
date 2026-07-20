@@ -10,7 +10,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     env:
-      CRYSTAL_GENOME_TEST_ARGS: "{'temperature_K': 300, 'target_size': 1000, 'msd_timesteps': 1000, 'lammps_command': 'mpirun -np 2 lmp'}"
+      CRYSTAL_GENOME_TEST_ARGS: "{'temperature_K': 300, 'target_size': 500, 'msd_timesteps': 1000}"
     steps:
       - name: Checkout project source code
         uses: actions/checkout@v3
@@ -45,6 +45,7 @@ jobs:
         shell: bash -el {0}
         run: |
           brew tap aflow-org/aflow
+          brew trust --formula aflow-org/aflow/aflow
           brew install aflow
           brew install gnu-units      
       
