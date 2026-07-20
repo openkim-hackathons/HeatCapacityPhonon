@@ -5,7 +5,7 @@ import shutil
 from typing import Optional, Sequence
 from ase.calculators.lammps import convert, Prism
 import numpy as np
-from kim_tools import get_stoich_reduced_list_from_prototype, KIMTestDriverError, AFLOW
+from kim_tools import get_stoich_reduced_list_from_prototype, KIMTestDriverError
 from kim_tools.symmetry_util.core import (reduce_and_avg, PeriodExtensionException,
                                           fit_voigt_tensor_to_cell_and_space_group)
 from kim_tools.test_driver import SingleCrystalTestDriver
@@ -279,14 +279,6 @@ class TestDriver(SingleCrystalTestDriver):
             # (good for non-cubic cells, ensures natoms >= target_size)
             atoms_new, repeat = compute_supercell_for_target_size(atoms_new.copy(), target_size)
 
-        # Get various useful constants
-        assert len(atoms_new) == len(original_atoms) * repeat[0] * repeat[1] * repeat[2]
-        number_atoms = len(atoms_new)
-        number_atoms_in_formula = sum(get_stoich_reduced_list_from_prototype(self.prototype_label))
-        assert number_atoms % number_atoms_in_formula == 0
-        number_formula = number_atoms // number_atoms_in_formula
-        total_mass_g_per_mol = sum(atoms_new.get_masses())
-
         # Get temperatures that should be simulated.
         temperature_step = temperature_step_fraction * temperature_K
         temperatures = [temperature_K + i * temperature_step
@@ -358,46 +350,18 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
                     f.cancel()
                 raise exception
 
-        # Initial processing of simulations. Need to do this first, then get
-        # enthalpies from compute_heat_capacity, then run another loop over temperatures
-        # to correct crystallographic info
+        # Collect results and check that symmetry is unchanged after all simulations.
         log_filenames = []
-        restart_filenames = []
-        average_position_filenames = []
-        average_cell_filenames = []
-        melted_crystal_filenames = []
+        all_cells = []
+        middle_temperature_atoms = None
+        middle_temperature = None
         for t_index, (future, t) in enumerate(zip(futures, temperatures)):
             assert future.done()
             assert future.exception() is None
             (log_filename, restart_filename, average_position_filename, average_cell_filename,
              melted_crystal_filename) = future.result()
             log_filenames.append(log_filename)
-            restart_filenames.append(restart_filename)
-            average_position_filenames.append(average_position_filename)
-            average_cell_filenames.append(average_cell_filename)
-            melted_crystal_filenames.append(melted_crystal_filename)
-        
-        # compute_heat_capacity also extracts individual enthalpies for each temperature, so run it now
-        c = compute_heat_capacity(temperatures, log_filenames, 2)
-        # Collect results and check that symmetry is unchanged after all simulations.
-        all_cells = []
-        middle_temperature_atoms = None
-        middle_temperature = None
-        for t_index, (
-            t,
-            log_filename,
-            restart_filename,
-            average_position_filename,
-            average_cell_filename,
-            melted_crystal_filename
-        ) in enumerate(zip(
-            temperatures,
-            log_filenames,
-            restart_filenames,
-            average_position_filenames,
-            average_cell_filenames,
-            melted_crystal_filenames
-        )):
+
             # Check that crystal did not melt or vaporize.
             with open(log_filename, "r") as f:
                 for line in f:
@@ -425,14 +389,13 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
                 middle_temperature = t
             
             # Check that the symmetry of the structure did not change.
-            # Write NPT crystal structures.
-            try:
-                self._update_nominal_parameter_values(reduced_atoms)
-            except (AFLOW.FailedToMatchException, AFLOW.ChangedSymmetryException):
+            if not self._verify_unchanged_symmetry(reduced_atoms):
                 reduced_atoms.write(f"{output_dir}/reduced_atoms_temperature_{t_index}_failing.poscar",
                                     format="vasp", sort=True)
                 raise KIMTestDriverError(f"Symmetry of structure changed during simulation at temperature {t} K.")
             
+            # Write NPT crystal structures.
+            self._update_nominal_parameter_values(reduced_atoms)
             # since we're looping over the futures, one per temperature
             # calling this will append the current cell, one per temperature, 
             # into an array for later use
@@ -440,35 +403,6 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
             self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt", write_stress=True,
                                                                        write_temp=t)
             self._add_file_to_current_property_instance("restart-file", restart_filename)
-
-            # Write density
-            density = total_mass_g_per_mol/atoms_new.get_volume()
-            self._add_property_instance_and_common_crystal_genome_keys("mass-density-crystal-npt", write_stress=True,
-                                                                       write_temp=t)
-            self._add_key_to_current_property_instance("mass-density", density, "amu/angstrom^3")
-
-            # Write enthalpy
-            h = c["enthalpy_means"][t_index]
-            h_err = c["enthalpy_errs"][t_index]
-
-            self._add_property_instance_and_common_crystal_genome_keys(
-                "enthalpy-crystal-npt", write_stress=True, write_temp=t)
-            
-            self._add_key_to_current_property_instance(
-                "enthalpy-per-atom", h / number_atoms,
-                "eV",
-                uncertainty_info={"source-std-uncert-value": h_err / number_atoms})
-
-            self._add_key_to_current_property_instance(
-                "enthalpy-per-formula", h / number_formula,
-                "eV",
-                uncertainty_info={"source-std-uncert-value": h_err / number_formula})
-
-            self._add_key_to_current_property_instance(
-                "specific-enthalpy", h / total_mass_g_per_mol,
-                "eV/amu",
-                uncertainty_info={"source-std-uncert-value": h_err / total_mass_g_per_mol})            
-            
             
             # Reset to original atoms.
             self._update_nominal_parameter_values(original_atoms)
@@ -476,6 +410,7 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
         assert middle_temperature_atoms is not None
         assert middle_temperature is not None
 
+        c = compute_heat_capacity(temperatures, log_filenames, 2)
         alpha = compute_alpha_tensor(all_cells, temperatures)
 
         # Print result.
@@ -490,6 +425,8 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
 
         # Write property.
         max_accuracy = len(temperatures) - 1
+        assert len(atoms_new) == len(original_atoms) * repeat[0] * repeat[1] * repeat[2]
+        number_atoms = len(atoms_new)
         self._update_nominal_parameter_values(middle_temperature_atoms)
         constant_pressure_heat_capacity = c[f"finite_difference_accuracy_{max_accuracy}"][0]
         constant_pressure_heat_capacity_uncert = c[f"finite_difference_accuracy_{max_accuracy}"][1]
@@ -511,11 +448,15 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
             "eV/K",
             uncertainty_info={"source-std-uncert-value": constant_pressure_heat_capacity_uncert / number_atoms})
 
+        number_atoms_in_formula = sum(get_stoich_reduced_list_from_prototype(self.prototype_label))
+        assert number_atoms % number_atoms_in_formula == 0
+        number_formula = number_atoms // number_atoms_in_formula
         self._add_key_to_current_property_instance(
             "heat-capacity-per-formula", constant_pressure_heat_capacity / number_formula,
             "eV/K",
             uncertainty_info={"source-std-uncert-value": constant_pressure_heat_capacity_uncert / number_formula})
 
+        total_mass_g_per_mol = sum(atoms_new.get_masses())
         self._add_key_to_current_property_instance(
             "specific-heat-capacity", constant_pressure_heat_capacity / total_mass_g_per_mol,
             "eV/K/amu",
