@@ -5,11 +5,8 @@ atoms = bulk("Al")
 td=TestDriver("EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_006")
 td(
         atoms,
-        temperature_K=293.15,
-        target_size=1000,
-        rlc_min_samples=100,
-        msd_timesteps=5000,
-        lammps_command= "mpirun -np 2 --bind-to numa lmp",
+        temperature_K=300,
+        lammps_command= "mpirun -np 12 --bind-to numa lmp",
         max_workers= 3,
 )
 td.write_property_instances_to_file()
