@@ -1,6 +1,7 @@
 @< path("{{TEST_DRIVER_NAME}}") >@ {# FILENAME = pipeline.stdin.tpl #}
 @< MODELNAME >@
 {{temperature_K}}
+{{pressure_eV_angstrom3}}
 {{cell_cauchy_stress_eV_angstrom3|join(' ')}}
 {{crystal_genome_test_args}}
 {% if parameter_sets is not defined %}@< query({

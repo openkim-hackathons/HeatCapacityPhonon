@@ -1,16 +1,15 @@
 from test_driver.test_driver import TestDriver
 from ase.build import bulk
 
-atoms = bulk("Au")
-td=TestDriver("Sim_LAMMPS_ADP_StarikovGordeevLysogorskiy_2020_SiAuAl__SM_113843830602_000")
-print(td(
+atoms = bulk("Al")
+td=TestDriver("EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_006")
+td(
         atoms,
-        temperature_K= 293.15,
-        repeat= (3, 3, 3),
-        lammps_command= "lmp",
+        temperature_K=300,
+        lammps_command= "mpirun -np 12 --bind-to numa lmp",
         max_workers= 3,
-))
-
+)
+td.write_property_instances_to_file()
 
 
 

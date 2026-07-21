@@ -5,7 +5,7 @@ import shutil
 from typing import Optional, Sequence
 from ase.calculators.lammps import convert, Prism
 import numpy as np
-from kim_tools import get_stoich_reduced_list_from_prototype, KIMTestDriverError
+from kim_tools import get_stoich_reduced_list_from_prototype, KIMTestDriverError, AFLOW
 from kim_tools.symmetry_util.core import (reduce_and_avg, PeriodExtensionException,
                                           fit_voigt_tensor_to_cell_and_space_group)
 from kim_tools.test_driver import SingleCrystalTestDriver
@@ -15,13 +15,25 @@ from .structure_utils import compute_supercell_for_target_size
 
 
 class TestDriver(SingleCrystalTestDriver):
-    def _calculate(self, temperature_step_fraction: float = 0.01, number_symmetric_temperature_steps: int = 1,
-                   timestep_ps: float = 0.001, thermo_sampling_period: int = 100, target_size: int = 10000,
-                   repeat: Optional[Sequence[int]] = None, max_workers: Optional[int] = None,
-                   lammps_command: str = "lmp", msd_threshold_angstrom_squared_per_sampling_timesteps: float = 0.1,
-                   number_msd_timesteps: int = 20000, random_seeds: Optional[Sequence[int]] = (1, 2, 3),
-                   rlc_n_every: int = 10, rlc_run_length: int = 10000, rlc_min_samples: int = 100,
-                   output_dir: str = "output", equilibration_plots: bool = True, **kwargs) -> None:
+    def _calculate(
+        self,
+        timestep_ps: float = 0.001,
+        target_size: int = 10000,
+        repeat: Optional[Sequence[int]] = None,
+        lammps_command: str = "lmp",
+        msd_threshold_angstrom_squared_per_sampling_timesteps: float = 0.1,
+        msd_timesteps: int = 20000,
+        thermo_sampling_period: int = 100,
+        random_seeds: Optional[Sequence[int]] = (1, 2, 3),
+        rlc_n_every: int = 10,
+        rlc_initial_run_length: int = 10000,
+        rlc_min_samples: Optional[int] = None,
+        output_dir: str = "output",
+        equilibration_plots: bool = True,
+        temperature_step_fraction: float = 0.1,
+        number_symmetric_temperature_steps: int = 1,
+        max_workers: Optional[int] = None, 
+        **kwargs) -> None:
         """
         Estimate constant-pressure heat capacity and linear thermal expansion tensor with finite-difference numerical
         derivatives.
@@ -53,6 +65,82 @@ class TestDriver(SingleCrystalTestDriver):
 
         All output files are written to the given output directory.
 
+        :param timestep_ps:
+            Time step in picoseconds.
+            Default is 0.001 ps (1 fs).
+            Should be bigger than zero.
+        :type timestep_ps: float
+        :param target_size:
+            Target number of atoms in the supercell to build by repeating the unit cell. Uses cutoff-based expansion
+            with target size constraint (good for non-cubic cells). The algorithm starts with an 20Å cutoff radius and
+            recursively decreases it until the supercell has fewer atoms than target_size.
+            Default is 10000.
+            Should be bigger than zero.
+            Ignored if repeat is specified.
+        :type target_size: int
+        :param repeat:
+            Tuple of three integers specifying how often to repeat the unit cell in each direction to build the
+            supercell.
+            If None, the repeat will be determined based on the target_size argument using a cutoff-based approach.
+            Default is None.
+            If not None, all entries have to be bigger than zero.
+        :type repeat: Sequence[int]
+        :param lammps_command:
+            Command to run Lammps.
+            Default is "lmp".
+        :type lammps_command: str
+        :param msd_threshold_angstrom_squared_per_sampling_timesteps:
+            Mean-squared displacement threshold in Angstroms^2 per thermo_sampling_period to detect melting or
+            vaporization.
+            Default is 0.1.
+            Should be bigger than zero.
+        :type msd_threshold_angstrom_squared_per_sampling_timesteps: float
+        :param msd_timesteps:
+            Number of timesteps to monitor the mean-squared displacement in Lammps.
+            Before the mean-squared displacement is monitored, the system will be equilibrated for the same number of
+            timesteps.
+            Default is 20000 timesteps.
+            Should be bigger than zero and a multiple of thermo_sampling_period.
+        :type msd_timesteps: int
+        :param thermo_sampling_period:
+            Sample thermodynamic variables every thermo_sampling_period timesteps in Lammps.
+            Default is 100 timesteps.
+            Should be bigger than zero.
+        :type thermo_sampling_period: int
+        :param random_seeds:
+            Random seeds for the Lammps simulations.
+            This has to be a sequence of 2 * number_symmetric_temperature_steps + 1 integers for the different
+            temperatures being simulated.
+            If None is given, random seeds will be sampled.
+            Default is (1, 2, 3).
+            Each seed should be bigger than zero.
+        :type random_seeds: Optional[Sequence[int]]
+        :param rlc_n_every:
+            Number of timesteps between storage of values for the run-length control in kim-convergence.
+            Default is 10.
+            Should be bigger than zero.
+        :type rlc_n_every: int
+        :param rlc_initial_run_length:
+            Run length in timesteps for run-length control with kim-convergence.
+            This will also be the timestep interval in generated trajectory files.
+            Default is 10000 timesteps.
+            Should be bigger than zero and a multiple of thermo_sampling_period.
+        :type rlc_initial_run_length: int
+        :param rlc_min_samples:
+            Minimum number of independent samples for convergence in run-length control with kim-convergence.
+            Based on empirical testing, it appears that higher temperatures require more samples to
+            reach equilibrated atomic positions. If this is not provided, the default is 
+            max(100,temperature_K/3)
+            Should be bigger than zero.
+        :type rlc_min_samples: int
+        :param output_dir:
+            Directory to which all output files will be written.
+            Default is "output".
+        :type output_dir: str
+        :param equilibration_plots:
+            Whether to generate diagnostic plots for the equilibration checks in kim-convergence.
+            Default is True.
+        :type equilibration_plots: bool
         :param temperature_step_fraction:
             Fraction of the target temperature that is used as temperature step for the finite-difference scheme.
             For example, if the target temperature is 300 K and the temperature_step_fraction is 0.1, the temperature
@@ -71,31 +159,6 @@ class TestDriver(SingleCrystalTestDriver):
             Default is 1.
             Should be bigger than zero.
         :type number_symmetric_temperature_steps: int
-        :param timestep_ps:
-            Time step in picoseconds.
-            Default is 0.001 ps (1 fs).
-            Should be bigger than zero.
-        :type timestep_ps: float
-        :param thermo_sampling_period:
-            Sample thermodynamic variables every thermo_sampling_period timesteps in Lammps.
-            Default is 100 timesteps.
-            Should be bigger than zero.
-        :type thermo_sampling_period: int
-        :param target_size:
-            Target number of atoms in the supercell to build by repeating the unit cell. Uses cutoff-based expansion
-            with target size constraint (good for non-cubic cells). The algorithm starts with an 20Å cutoff radius and
-            recursively decreases it until the supercell has fewer atoms than target_size.
-            Default is 10000.
-            Should be bigger than zero.
-            Ignored if repeat is specified.
-        :type target_size: int
-        :param repeat:
-            Tuple of three integers specifying how often to repeat the unit cell in each direction to build the
-            supercell.
-            If None, the repeat will be determined based on the target_size argument using a cutoff-based approach.
-            Default is None.
-            If not None, all entries have to be bigger than zero.
-        :type repeat: Sequence[int]
         :param max_workers:
             Maximum number of parallel workers to use for running Lammps simulations at different temperatures.
             If None is given, this will be set to 1.
@@ -103,54 +166,6 @@ class TestDriver(SingleCrystalTestDriver):
             lammps command itself.
             Default is None.
         :type max_workers: Optional[int]
-        :param lammps_command:
-            Command to run Lammps.
-            Default is "lmp".
-        :type lammps_command: str
-        :param msd_threshold_angstrom_squared_per_sampling_timesteps:
-            Mean-squared displacement threshold in Angstroms^2 per thermo_sampling_period to detect melting or
-            vaporization.
-            Default is 0.1.
-            Should be bigger than zero.
-        :type msd_threshold_angstrom_squared_per_sampling_timesteps: float
-        :param number_msd_timesteps:
-            Number of timesteps to monitor the mean-squared displacement in Lammps.
-            Before the mean-squared displacement is monitored, the system will be equilibrated for the same number of
-            timesteps.
-            Default is 20000 timesteps.
-            Should be bigger than zero and a multiple of thermo_sampling_period.
-        :param random_seeds:
-            Random seeds for the Lammps simulations.
-            This has to be a sequence of 2 * number_symmetric_temperature_steps + 1 integers for the different
-            temperatures being simulated.
-            If None is given, random seeds will be sampled.
-            Default is (1, 2, 3).
-            Each seed should be bigger than zero.
-        :type random_seeds: Optional[Sequence[int]]
-        :param rlc_n_every:
-            Number of timesteps between storage of values for the run-length control in kim-convergence.
-            Default is 10.
-            Should be bigger than zero.
-        :type rlc_n_every: int
-        :param rlc_run_length:
-            Run length in timesteps for run-length control with kim-convergence.
-            This will also be the timestep interval in generated trajectory files.
-            Default is 10000 timesteps.
-            Should be bigger than zero and a multiple of thermo_sampling_period.
-        :type rlc_run_length: int
-        :param rlc_min_samples:
-            Minimum number of independent samples for convergence in run-length control with kim-convergence.
-            Default is 100.
-            Should be bigger than zero.
-        :type rlc_min_samples: int
-        :param output_dir:
-            Directory to which all output files will be written.
-            Default is "output".
-        :type output_dir: str
-        :param equilibration_plots:
-            Whether to generate diagnostic plots for the equilibration checks in kim-convergence.
-            Default is True.
-        :type equilibration_plots: bool
 
         :raises ValueError:
             If any of the input arguments are invalid.
@@ -172,17 +187,6 @@ class TestDriver(SingleCrystalTestDriver):
         if not temperature_K > 0.0:
             raise ValueError("Temperature has to be larger than zero.")
 
-        if not len(cell_cauchy_stress_bar) == 6:
-            raise ValueError("Specify all six (x, y, z, xy, xz, yz) entries of the cauchy stress tensor.")
-
-        if not (cell_cauchy_stress_bar[0] == cell_cauchy_stress_bar[1] == cell_cauchy_stress_bar[2]):
-            raise ValueError("The diagonal entries of the stress tensor have to be equal so that a hydrostatic "
-                             "pressure is used.")
-
-        if not (cell_cauchy_stress_bar[3] == cell_cauchy_stress_bar[4] == cell_cauchy_stress_bar[5] == 0.0):
-            raise ValueError("The off-diagonal entries of the stress tensor have to be zero so that a hydrostatic "
-                             "pressure is used.")
-
         if not timestep_ps > 0.0:
             raise ValueError("Timestep has to be larger than zero.")
 
@@ -200,9 +204,6 @@ class TestDriver(SingleCrystalTestDriver):
         if not thermo_sampling_period > 0:
             raise ValueError("Number of timesteps between sampling in Lammps has to be bigger than zero.")
 
-        if not target_size > 0:
-            raise ValueError("Target size for supercell construction has to be bigger than zero.")
-
         if repeat is not None:
             if not len(repeat) == 3:
                 raise ValueError("The repeat argument has to be a tuple of three integers.")
@@ -219,11 +220,11 @@ class TestDriver(SingleCrystalTestDriver):
         if not msd_threshold_angstrom_squared_per_sampling_timesteps > 0.0:
             raise ValueError("The mean-squared displacement threshold has to be bigger than zero.")
 
-        if not number_msd_timesteps > 0:
+        if not msd_timesteps > 0:
             raise ValueError("The number of timesteps to monitor the mean-squared displacement has to be bigger than "
                              "zero.")
 
-        if not number_msd_timesteps % thermo_sampling_period == 0:
+        if not msd_timesteps % thermo_sampling_period == 0:
             raise ValueError("The number of timesteps to monitor the mean-squared displacement has to be a multiple of "
                              "the thermo sampling period.")
 
@@ -241,19 +242,22 @@ class TestDriver(SingleCrystalTestDriver):
             raise ValueError("The number of timesteps between storage of values for run-length control has to be "
                              "bigger than zero.")
 
-        if not rlc_run_length > 0:
+        if not rlc_initial_run_length > 0:
             raise ValueError("The run length for run-length control has to be bigger than zero.")
 
-        if not rlc_run_length % thermo_sampling_period == 0:
+        if not rlc_initial_run_length % thermo_sampling_period == 0:
             raise ValueError("The run length for run-length control has to be a multiple of the number of the thermo"
                              "sampling period.")
 
+        if rlc_min_samples is None:
+            rlc_min_samples = max(100, int(temperature_K/3))
+            
         if not rlc_min_samples > 0:
             raise ValueError("The minimum number of samples to use for convergence checks in run-length control has to "
                              "be bigger than zero.")
 
-        # Get pressure from cauchy stress tensor.
-        pressure_bar = -cell_cauchy_stress_bar[0]
+        # Get pressure
+        pressure_bar = self._get_pressure(unit='bars', enforce_hydrostatic=True)
 
          # Copy original atoms so that their information does not get lost.
         original_atoms = self._get_atoms()
@@ -274,6 +278,14 @@ class TestDriver(SingleCrystalTestDriver):
             # Use cutoff-based expansion with target size constraint
             # (good for non-cubic cells, ensures natoms >= target_size)
             atoms_new, repeat = compute_supercell_for_target_size(atoms_new.copy(), target_size)
+
+        # Get various useful constants        
+        assert len(atoms_new) == len(original_atoms) * repeat[0] * repeat[1] * repeat[2]
+        number_atoms = len(atoms_new)
+        number_atoms_in_formula = sum(get_stoich_reduced_list_from_prototype(self.prototype_label))
+        assert number_atoms % number_atoms_in_formula == 0
+        number_formula = number_atoms // number_atoms_in_formula
+        total_mass_g_per_mol = sum(atoms_new.get_masses())            
 
         # Get temperatures that should be simulated.
         temperature_step = temperature_step_fraction * temperature_K
@@ -319,7 +331,7 @@ class TestDriver(SingleCrystalTestDriver):
         with open(f"{output_dir}/rlc_parameters.py", "w") as file:
             print(f"""from typing import Optional
 
-INITIAL_RUN_LENGTH: int = {rlc_run_length}
+INITIAL_RUN_LENGTH: int = {rlc_initial_run_length}
 MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", file=file)
 
         # Write lammps file.
@@ -334,8 +346,8 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
             for i, (t, rs) in enumerate(zip(temperatures, random_seeds)):
                 futures.append(executor.submit(
                     run_lammps, self.kim_model_name, i, t, pressure_bar, timestep_ps, thermo_sampling_period,
-                    species, msd_threshold_angstrom_squared_per_sampling_timesteps, number_msd_timesteps,
-                    rlc_run_length, rlc_n_every, output_dir, equilibration_plots, lammps_command, rs))
+                    species, msd_threshold_angstrom_squared_per_sampling_timesteps, msd_timesteps,
+                    rlc_initial_run_length, rlc_n_every, output_dir, equilibration_plots, lammps_command, rs))
 
         # If one simulation fails, cancel all runs.
         for future in as_completed(futures):
@@ -384,14 +396,14 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
                 middle_temperature_atoms = reduced_atoms.copy()
                 middle_temperature = t
             
-            # Check that the symmetry of the structure did not change.
-            if not self._verify_unchanged_symmetry(reduced_atoms):
+            # Get the new parameter values. This raises exceptions in case of a symmetry change.
+            try:
+                self._update_nominal_parameter_values(reduced_atoms)
+            except (AFLOW.FailedToMatchException, AFLOW.ChangedSymmetryException):
                 reduced_atoms.write(f"{output_dir}/reduced_atoms_temperature_{t_index}_failing.poscar",
                                     format="vasp", sort=True)
                 raise KIMTestDriverError(f"Symmetry of structure changed during simulation at temperature {t} K.")
             
-            # Write NPT crystal structures.
-            self._update_nominal_parameter_values(reduced_atoms)
             # since we're looping over the futures, one per temperature
             # calling this will append the current cell, one per temperature, 
             # into an array for later use
@@ -399,9 +411,12 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
             self._add_property_instance_and_common_crystal_genome_keys("crystal-structure-npt", write_stress=True,
                                                                        write_temp=t)
             self._add_file_to_current_property_instance("restart-file", restart_filename)
-            
-            # Reset to original atoms.
-            self._update_nominal_parameter_values(original_atoms)
+
+            # Write density
+            density = total_mass_g_per_mol/atoms_new.get_volume()
+            self._add_property_instance_and_common_crystal_genome_keys("mass-density-crystal-npt", write_stress=True,
+                                                                       write_temp=t)
+            self._add_key_to_current_property_instance("mass-density", density, "amu/angstrom^3")
 
         assert middle_temperature_atoms is not None
         assert middle_temperature is not None
@@ -421,8 +436,6 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
 
         # Write property.
         max_accuracy = len(temperatures) - 1
-        assert len(atoms_new) == len(original_atoms) * repeat[0] * repeat[1] * repeat[2]
-        number_atoms = len(atoms_new)
         self._update_nominal_parameter_values(middle_temperature_atoms)
         constant_pressure_heat_capacity = c[f"finite_difference_accuracy_{max_accuracy}"][0]
         constant_pressure_heat_capacity_uncert = c[f"finite_difference_accuracy_{max_accuracy}"][1]
@@ -444,9 +457,6 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
             "eV/K",
             uncertainty_info={"source-std-uncert-value": constant_pressure_heat_capacity_uncert / number_atoms})
 
-        number_atoms_in_formula = sum(get_stoich_reduced_list_from_prototype(self.prototype_label))
-        assert number_atoms % number_atoms_in_formula == 0
-        number_formula = number_atoms // number_atoms_in_formula
         self._add_key_to_current_property_instance(
             "heat-capacity-per-formula", constant_pressure_heat_capacity / number_formula,
             "eV/K",
@@ -488,41 +498,20 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
                                                                          center_cell,
                                                                          space_group)
         
-        # alpha11 unique for all space groups
-        unique_components_names = ["alpha1"]
-        unique_components_values = [alpha11]
-        # unique_components_errs = [alpha11_err]
+        
+        # Pre-fill names and values, then pick out the ones that are unique based on space group num
+        components_names = ["alpha1", "alpha2", "alpha3", "alpha4", "alpha5", "alpha6"]
+        components_values = [alpha11, alpha22, alpha33, alpha23, alpha13, alpha12]
+        maximum_space_group = [230, 74, 194, 2, 15, 2]
 
-        # hexagonal, trigonal, tetragonal space groups alpha33 also unique
-        if space_group <= 194:
-            unique_components_names.append("alpha3")
-            unique_components_values.append(alpha33)
-            # unique_components_errs.append(alpha33_err)
+        unique_components_names = []
+        unique_components_values = []
 
-        # orthorhombic, alpha22 also unique
-        if space_group <= 74:
-
-            # insert alpha22 in the middle so they end up sorted
-            # into voigt notation order
-            unique_components_names.insert(1,"alpha2")
-            unique_components_values.insert(1,alpha22)
-            # unique_components_errs.insert(1,alpha22_err)
-
-        # monoclinic or triclinic, all components potentially unique
-        if space_group <= 15:
-
-            unique_components_names.append("alpha4")
-            unique_components_names.append("alpha5")
-            unique_components_names.append("alpha6")
-
-            unique_components_values.append(alpha23)
-            unique_components_values.append(alpha13)
-            unique_components_values.append(alpha12)
-
-            # unique_components_errs.append(alpha23_err)
-            # unique_components_errs.append(alpha13_err)
-            # unique_components_errs.append(alpha12_err)
-
+        for name, value, max_sg in zip(components_names, components_values, maximum_space_group):
+            if space_group <= max_sg:
+                unique_components_names.append(name)
+                unique_components_values.append(value)
+                
         """
         Presently, errors are not reported because there isn't a good way to get
         the initial uncertainty of the cell parameters. If we determine a good way to do that,

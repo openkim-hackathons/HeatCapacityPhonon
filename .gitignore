@@ -1,4 +1,7 @@
-output/*
+output*
+log.*
+*.log
+*.out
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
