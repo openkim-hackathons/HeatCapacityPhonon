@@ -279,6 +279,14 @@ class TestDriver(SingleCrystalTestDriver):
             # (good for non-cubic cells, ensures natoms >= target_size)
             atoms_new, repeat = compute_supercell_for_target_size(atoms_new.copy(), target_size)
 
+        # Get various useful constants        
+        assert len(atoms_new) == len(original_atoms) * repeat[0] * repeat[1] * repeat[2]
+        number_atoms = len(atoms_new)
+        number_atoms_in_formula = sum(get_stoich_reduced_list_from_prototype(self.prototype_label))
+        assert number_atoms % number_atoms_in_formula == 0
+        number_formula = number_atoms // number_atoms_in_formula
+        total_mass_g_per_mol = sum(atoms_new.get_masses())            
+
         # Get temperatures that should be simulated.
         temperature_step = temperature_step_fraction * temperature_K
         temperatures = [temperature_K + i * temperature_step
@@ -404,6 +412,12 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
                                                                        write_temp=t)
             self._add_file_to_current_property_instance("restart-file", restart_filename)
 
+            # Write density
+            density = total_mass_g_per_mol/atoms_new.get_volume()
+            self._add_property_instance_and_common_crystal_genome_keys("mass-density-crystal-npt", write_stress=True,
+                                                                       write_temp=t)
+            self._add_key_to_current_property_instance("mass-density", density, "amu/angstrom^3")
+
         assert middle_temperature_atoms is not None
         assert middle_temperature is not None
 
@@ -422,8 +436,6 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
 
         # Write property.
         max_accuracy = len(temperatures) - 1
-        assert len(atoms_new) == len(original_atoms) * repeat[0] * repeat[1] * repeat[2]
-        number_atoms = len(atoms_new)
         self._update_nominal_parameter_values(middle_temperature_atoms)
         constant_pressure_heat_capacity = c[f"finite_difference_accuracy_{max_accuracy}"][0]
         constant_pressure_heat_capacity_uncert = c[f"finite_difference_accuracy_{max_accuracy}"][1]
@@ -445,9 +457,6 @@ MINIMUM_NUMBER_OF_INDEPENDENT_SAMPLES: Optional[int] = {rlc_min_samples}""", fil
             "eV/K",
             uncertainty_info={"source-std-uncert-value": constant_pressure_heat_capacity_uncert / number_atoms})
 
-        number_atoms_in_formula = sum(get_stoich_reduced_list_from_prototype(self.prototype_label))
-        assert number_atoms % number_atoms_in_formula == 0
-        number_formula = number_atoms // number_atoms_in_formula
         self._add_key_to_current_property_instance(
             "heat-capacity-per-formula", constant_pressure_heat_capacity / number_formula,
             "eV/K",
